@@ -5,102 +5,119 @@ import { env } from "../../shared/config/env";
 const FALLBACK_TRAINER_COURSES = [
   {
     id: "frontend-react-development",
+    isFallback: true,
     title: "React Frontend Development",
     subtitle: "Components, hooks, state management, and frontend projects",
     category: "Frontend Development",
   },
   {
     id: "frontend-nextjs-development",
+    isFallback: true,
     title: "Next.js Production Development",
     subtitle: "Routing, server rendering, API routes, auth, and deployment",
     category: "Frontend Development",
   },
   {
     id: "html-css-responsive-design",
+    isFallback: true,
     title: "HTML CSS Responsive Web Design",
     subtitle: "Layouts, responsive UI, forms, animations, and landing pages",
     category: "Web Development",
   },
   {
     id: "full-stack-web-development",
+    isFallback: true,
     title: "Full Stack Web Development",
     subtitle: "Frontend, backend, APIs, database, and deployment",
     category: "Full Stack Development",
   },
   {
     id: "mern-stack-development",
+    isFallback: true,
     title: "MERN Stack Development",
     subtitle: "MongoDB, Express, React, Node.js, JWT auth, and projects",
     category: "Full Stack Development",
   },
   {
     id: "javascript-development",
+    isFallback: true,
     title: "Modern JavaScript Development",
     subtitle: "ES6, async programming, DOM, APIs, and projects",
     category: "Web Development",
   },
   {
     id: "node-api-development",
+    isFallback: true,
     title: "Node.js Backend API Development",
     subtitle: "Express APIs, authentication, validation, and database integration",
     category: "Backend Development",
   },
   {
     id: "spring-boot-api-development",
+    isFallback: true,
     title: "Spring Boot API Development",
     subtitle: "REST APIs, security, services, repositories, and database access",
     category: "Backend Development",
   },
   {
     id: "python-programming",
+    isFallback: true,
     title: "Python Programming",
     subtitle: "Core Python, problem solving, automation, and practical tasks",
     category: "Programming",
   },
   {
     id: "java-programming",
+    isFallback: true,
     title: "Java Programming",
     subtitle: "OOP, collections, exception handling, and application development",
     category: "Programming",
   },
   {
     id: "flutter-mobile-development",
+    isFallback: true,
     title: "Flutter Mobile App Development",
     subtitle: "Widgets, navigation, API integration, Firebase, and app release",
     category: "Mobile App Development",
   },
   {
     id: "react-native-development",
+    isFallback: true,
     title: "React Native App Development",
     subtitle: "Mobile UI, navigation, native APIs, and cross-platform apps",
     category: "Mobile App Development",
   },
   {
     id: "sql-database-development",
+    isFallback: true,
     title: "SQL Database Development",
     subtitle: "Queries, joins, schema design, and database practice",
     category: "Database",
   },
   {
     id: "mongodb-nosql-development",
+    isFallback: true,
     title: "MongoDB NoSQL Development",
     subtitle: "Collections, schemas, aggregation, indexing, and app integration",
     category: "Database",
   },
   {
     id: "devops-cloud-deployment",
+    isFallback: true,
     title: "DevOps and Cloud Deployment",
     subtitle: "Git, CI/CD, VPS deployment, Nginx, and cloud basics",
     category: "DevOps",
   },
   {
     id: "aws-cloud-development",
+    isFallback: true,
     title: "AWS Cloud Development",
     subtitle: "Cloud basics, hosting, storage, deployment, and production setup",
     category: "Cloud Computing",
   },
   {
     id: "ui-ux-product-design",
+    isFallback: true,
     title: "UI UX Product Design",
     subtitle: "Wireframes, user flows, design systems, and Figma practice",
     category: "UI/UX Design",
@@ -147,6 +164,7 @@ function normalizeCourse(dto) {
   const raw = dto || {};
   return {
     id: String(raw.id || raw._id || raw.courseId || ""),
+    isFallback: Boolean(raw.isFallback),
     title: raw.title || raw.courseTitle || raw.name || raw.courseName || "Untitled course",
     subtitle: raw.subtitle || raw.shortDescription || "",
     category: raw.category || raw.tab || "",
@@ -191,6 +209,7 @@ function normalizeSession(dto) {
       raw.course?.courseTitle ||
       raw.course?.name ||
       "Assigned course",
+    category: raw.category || raw.course?.category || raw.tab || "",
     title: raw.title || raw.classTitle || "Recurring live session",
     subtitle: raw.subtitle || "",
     description: raw.description || "",
@@ -218,6 +237,18 @@ function normalizeSession(dto) {
       raw.cancellationReason ||
       todayCancellation?.reason ||
       "",
+    priceInPaise:
+      raw.priceInPaise ??
+      raw.price_in_paise ??
+      raw.adminPriceInPaise ??
+      raw.adminSetPriceInPaise ??
+      null,
+    trainerSharePercentage:
+      raw.trainerSharePercentage ??
+      raw.trainerSharePercent ??
+      raw.trainer_share_percentage ??
+      raw.commissionPercent ??
+      null,
     trainerId: raw.trainerId || "",
     trainerName: raw.trainerName || "",
     trainerEmail: raw.trainerEmail || "",
@@ -228,8 +259,10 @@ function normalizeSession(dto) {
 }
 
 function normalizeSessionPayload(payload) {
+  const courseId = String(payload.courseId || "").trim();
+  const courseTitle = String(payload.courseTitle || "").trim();
+  const category = String(payload.category || "").trim();
   const data = {
-    courseId: String(payload.courseId || "").trim(),
     title: String(payload.title || "").trim(),
     subtitle: String(payload.subtitle || "").trim(),
     description: String(payload.description || "").trim(),
@@ -241,6 +274,13 @@ function normalizeSessionPayload(payload) {
     recurrenceType: payload.recurrenceType || "daily",
   };
 
+  if (courseId) {
+    data.courseId = courseId;
+  } else {
+    data.courseTitle = courseTitle;
+    if (category) data.category = category;
+  }
+
   if (!payload.thumbnailFile) return data;
 
   const formData = new FormData();
@@ -249,6 +289,62 @@ function normalizeSessionPayload(payload) {
   });
   formData.append("thumbnail", payload.thumbnailFile);
   return formData;
+}
+
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function normalizeSessionEarning(dto) {
+  const raw = dto || {};
+  const session = raw.session || raw.liveSession || {};
+  return {
+    sessionId: String(raw.sessionId || raw.id || session.id || session._id || ""),
+    sessionTitle: raw.sessionTitle || raw.title || session.title || session.classTitle || "Live session",
+    adminSetPrice: toNumber(raw.adminSetPrice ?? raw.sessionPrice ?? raw.price),
+    paidStudents: toNumber(raw.paidStudents ?? raw.paidStudentCount ?? raw.studentsPaid),
+    grossRevenue: toNumber(raw.grossRevenue ?? raw.totalRevenue),
+    trainerSharePercent: toNumber(raw.trainerSharePercent ?? raw.commissionPercent ?? raw.sharePercent),
+    trainerEarning: toNumber(raw.trainerEarning ?? raw.trainerAmount ?? raw.earningAmount),
+    status: String(raw.status || raw.payoutStatus || "pending").toLowerCase(),
+    raw,
+  };
+}
+
+function normalizeEarnings(payload) {
+  const source = payload?.data || payload || {};
+  const summary = source.summary || source.totals || source;
+  const rawSessions =
+    source.sessions ||
+    source.sessionEarnings ||
+    source.earnings ||
+    source.items ||
+    [];
+
+  return {
+    totalEarnings: toNumber(summary.totalEarnings ?? summary.total ?? summary.trainerEarnings),
+    pendingEarnings: toNumber(summary.pendingEarnings ?? summary.pending),
+    payableEarnings: toNumber(summary.payableEarnings ?? summary.payable),
+    paidEarnings: toNumber(summary.paidEarnings ?? summary.paid),
+    sessionEarnings: Array.isArray(rawSessions)
+      ? rawSessions.map(normalizeSessionEarning)
+      : [],
+    raw: source,
+  };
+}
+
+function normalizePayout(dto) {
+  const raw = dto || {};
+  return {
+    id: String(raw.id || raw._id || raw.payoutId || ""),
+    amount: toNumber(raw.amount ?? raw.payoutAmount),
+    status: String(raw.status || raw.payoutStatus || "pending").toLowerCase(),
+    requestedAt: raw.requestedAt || raw.createdAt || "",
+    paidAt: raw.paidAt || raw.completedAt || "",
+    reference: raw.reference || raw.transactionId || raw.utr || "",
+    raw,
+  };
 }
 
 export async function getTrainerCourses() {
@@ -270,7 +366,13 @@ export async function getTrainerCourses() {
 
 export async function getTrainerSessions() {
   try {
-    const res = await axiosClient.get("/api/trainer/sessions");
+    let res;
+    try {
+      res = await axiosClient.get("/api/trainer/my-sessions");
+    } catch (err) {
+      if (getAxiosErrorStatus(err) !== 404) throw err;
+      res = await axiosClient.get("/api/trainer/sessions");
+    }
     const payload = unwrap(res);
     const sessions = Array.isArray(payload.data) ? payload.data : [];
     return sessions.map(normalizeSession).filter((session) => session.id);
@@ -308,6 +410,10 @@ export async function createTrainerSession(payload) {
     const responsePayload = unwrap(res);
     return normalizeSession(responsePayload.data);
   } catch (err) {
+    const backendMessage = getAxiosErrorMessage(err, "");
+    if (getAxiosErrorStatus(err) === 400 && backendMessage) {
+      throw new Error(backendMessage);
+    }
     throw new Error(
       getTrainerSessionError(err, "Unable to create recurring live session.", {
         preferBackendForbiddenMessage: true,
@@ -399,5 +505,40 @@ export async function restoreTodayTrainerSession(sessionId) {
     return payload.data ? normalizeSession(payload.data) : true;
   } catch (err) {
     throw new Error(getTrainerSessionError(err, "Unable to restore today's class."));
+  }
+}
+
+export async function getTrainerEarnings() {
+  try {
+    const res = await axiosClient.get("/api/trainer/earnings");
+    const payload = unwrap(res);
+    return normalizeEarnings(payload);
+  } catch (err) {
+    throw new Error(getAxiosErrorMessage(err, "Unable to load trainer earnings."));
+  }
+}
+
+export async function getTrainerSessionEarnings(sessionId) {
+  try {
+    const res = await axiosClient.get(
+      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/earnings`
+    );
+    const payload = unwrap(res);
+    return normalizeSessionEarning(payload.data);
+  } catch (err) {
+    throw new Error(getAxiosErrorMessage(err, "Unable to load session earnings."));
+  }
+}
+
+export async function getTrainerPayouts() {
+  try {
+    const res = await axiosClient.get("/api/trainer/payouts");
+    const payload = unwrap(res);
+    const payouts = Array.isArray(payload.data)
+      ? payload.data
+      : payload.data?.payouts || payload.payouts || [];
+    return Array.isArray(payouts) ? payouts.map(normalizePayout) : [];
+  } catch (err) {
+    throw new Error(getAxiosErrorMessage(err, "Unable to load trainer payouts."));
   }
 }
