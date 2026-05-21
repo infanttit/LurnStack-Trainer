@@ -9,155 +9,69 @@ import {
   FiImage,
   FiLogOut,
   FiMenu,
+  FiPauseCircle,
+  FiPlayCircle,
   FiPlusCircle,
   FiRefreshCw,
-  FiSend,
+  FiRotateCcw,
   FiSidebar,
+  FiStopCircle,
   FiTrash2,
+  FiUploadCloud,
   FiX,
   FiXCircle,
-  FiUploadCloud,
-  FiUsers,
-  FiVideo,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { PATHS } from "../../app/router/paths";
 import { useAuth } from "../../auth";
-import SmartImage from "../../shared/components/SmartImage";
 import {
-  cancelTrainerSession,
+  cancelTodayTrainerSession,
   createTrainerSession,
   deleteTrainerSession,
+  endTrainerSession,
+  getTrainerCourses,
+  getTrainerSession,
   getTrainerSessions,
   getTrainerStatus,
-  publishTrainerSession,
+  pauseTrainerSession,
+  restoreTodayTrainerSession,
+  resumeTrainerSession,
   updateTrainerSession,
 } from "../api/trainerSessionsApi";
 
 const INACTIVE_TRAINER_MESSAGE =
-  "Your trainer account is inactive. You cannot create new classes.";
+  "Your trainer account is inactive. You cannot manage recurring live sessions.";
 
 const initialForm = {
-  courseTitle: "",
-  category: "Trainer Courses",
+  courseId: "",
+  title: "",
+  subtitle: "",
   description: "",
-  classTitle: "",
-  scheduledDate: "",
   startTime: "",
   endTime: "",
-  meetUrl: "",
-  price: "499",
+  timezone: "Asia/Kolkata",
+  meetingLink: "",
   thumbnailPreview: "",
   thumbnailFile: null,
+  isRecurring: true,
+  recurrenceType: "daily",
 };
 
 const tabs = [
   { id: "overview", label: "Overview", icon: FiBookOpen },
-  { id: "create", label: "Create live class", icon: FiPlusCircle },
-  { id: "classes", label: "Uploaded classes", icon: FiVideo },
+  { id: "create", label: "Create daily session", icon: FiPlusCircle },
+  { id: "sessions", label: "Recurring sessions", icon: FiCalendar },
 ];
 
-const categoryOptions = [
-  "Trainer Courses",
-  "Web Development",
-  "Full Stack Development",
-  "Frontend Development",
-  "Backend Development",
-  "Mobile App Development",
-  "Data Science",
-  "Artificial Intelligence",
-  "Cloud Computing",
-  "DevOps",
-  "Cybersecurity",
-  "Database",
-  "UI/UX Design",
-  "Digital Marketing",
-  "Business Strategy",
-];
-
-const courseTitleOptionsByCategory = {
-  "Trainer Courses": [
-    "Full Stack Web Development Masterclass",
-    "React Hooks and State Management",
-    "Professional Web Development Bootcamp",
-    "SQL",
-    " PLSQL",
-    "Python",
-    "Java",
-    "Frontend Development",
-  ],
-  "Web Development": [
-    "Master React JS",
-    "Modern JavaScript Development",
-    "HTML CSS and Responsive Web Design",
-  ],
-  "Full Stack Development": [
-    "Full Stack Web Development",
-    "MERN Stack Project Bootcamp",
-    "Node.js React PostgreSQL Masterclass",
-  ],
-  "Frontend Development": [
-    "React Frontend Engineering",
-    "Advanced UI Development",
-    "Next.js Production Masterclass",
-  ],
-  "Backend Development": [
-    "Node.js Backend API Development",
-    "Express.js and Authentication",
-    "Backend Architecture with PostgreSQL",
-  ],
-  "Mobile App Development": [
-    "Flutter Mobile App Development",
-    "React Native App Development",
-    "Mobile UI and API Integration",
-  ],
-  "Data Science": [
-    "Python Data Science Bootcamp",
-    "SQL for Data Analysis",
-    "Machine Learning Foundations",
-  ],
-  "Artificial Intelligence": [
-    "AI Engineering Masterclass",
-    "Generative AI for Developers",
-    "LLM Application Development",
-  ],
-  "Cloud Computing": [
-    "AWS Cloud Practitioner",
-    "Cloud Deployment Fundamentals",
-    "Firebase and Cloud Firestore",
-  ],
-  DevOps: [
-    "Docker and Kubernetes Essentials",
-    "CI/CD Pipeline Masterclass",
-    "VPS Deployment and Nginx",
-  ],
-  Cybersecurity: [
-    "Web Application Security",
-    "Ethical Hacking Foundations",
-    "API Security Masterclass",
-  ],
-  Database: [
-    "PostgreSQL Database Design",
-    "MongoDB NoSQL Guide",
-    "Prisma ORM Masterclass",
-  ],
-  "UI/UX Design": [
-    "UI UX Design Foundations",
-    "Design Systems Masterclass",
-    "Figma for Product Design",
-  ],
-  "Digital Marketing": [
-    "Digital Marketing Strategy",
-    "SEO and Content Marketing",
-    "Performance Marketing Masterclass",
-  ],
-  "Business Strategy": [
-    "Strategic Mastery for Global Markets",
-    "Leadership and Business Growth",
-    "Startup Strategy Masterclass",
-  ],
+const fieldLabels = {
+  courseId: "Course",
+  title: "Session title",
+  description: "Description",
+  startTime: "Start time",
+  endTime: "End time",
+  meetingLink: "Meeting link",
 };
 
 const emptyConfirmDialog = {
@@ -169,61 +83,50 @@ const emptyConfirmDialog = {
   reason: "",
 };
 
-const fieldLabels = {
-  courseTitle: "Course title",
-  category: "Category",
-  description: "Course description",
-  classTitle: "Live class title",
-  scheduledDate: "Date",
-  startTime: "Start time",
-  endTime: "End time",
-  meetUrl: "Meeting link",
-};
-
-function formatClassTime(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Not scheduled";
-  return date.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatTimeOnly(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatClassTimeRange(liveClass) {
-  const start = formatClassTime(liveClass?.scheduledAt);
-  const end = formatTimeOnly(liveClass?.endsAt);
-  return end ? `${start} to ${end}` : start;
-}
-
-function getDisplayStatus(liveClass) {
-  const status = String(liveClass?.status || "").toLowerCase();
-  const endsAt = new Date(liveClass?.endsAt || "").getTime();
-  if (status !== "cancelled" && Number.isFinite(endsAt) && Date.now() > endsAt) return "completed";
-  return status || "draft";
-}
-
 function getDurationMinutes(startTime, endTime) {
   const [startHour, startMinute] = String(startTime || "").split(":").map(Number);
   const [endHour, endMinute] = String(endTime || "").split(":").map(Number);
   if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return 0;
-
   const startTotal = startHour * 60 + startMinute;
   const endTotal = endHour * 60 + endMinute;
   return endTotal > startTotal ? endTotal - startTotal : 0;
+}
+
+function formatTime(time, timezone = "Asia/Kolkata") {
+  if (!/^\d{2}:\d{2}$/.test(String(time || ""))) return "";
+  const date = new Date(`2026-01-01T${time}:00+05:30`);
+  return date.toLocaleTimeString("en-IN", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatDailyWindow(session) {
+  const start = formatTime(session?.startTime, session?.timezone);
+  const end = formatTime(session?.endTime, session?.timezone);
+  if (!start || !end) return "Time not set";
+  return `Every day, ${start} to ${end}`;
+}
+
+function getSessionStatus(session) {
+  if (session?.isEnded || session?.status === "ended") return "ended";
+  if (session?.isPaused || session?.status === "paused") return "paused";
+  if (session?.isTodayCancelled) return "today cancelled";
+  if (session?.todayStatus === "completed_today") return "today completed";
+  if (session?.todayStatus === "live") return "live now";
+  if (session?.todayStatus === "upcoming") return "upcoming today";
+  return session?.status || "active";
+}
+
+function getStatusClass(status) {
+  if (status === "ended") return "bg-slate-100 text-slate-700 border-slate-200";
+  if (status === "paused") return "bg-amber-50 text-amber-700 border-amber-100";
+  if (status === "today cancelled") return "bg-red-50 text-red-700 border-red-100";
+  if (status === "today completed") return "bg-slate-100 text-slate-700 border-slate-200";
+  if (status === "live now") return "bg-blue-50 text-blue-700 border-blue-100";
+  if (status === "upcoming today") return "bg-cyan-50 text-cyan-700 border-cyan-100";
+  return "bg-emerald-50 text-emerald-700 border-emerald-100";
 }
 
 function readImageFile(file) {
@@ -242,11 +145,13 @@ export default function TrainerDashboardPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [form, setForm] = useState(initialForm);
-  const [liveClasses, setLiveClasses] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [formErrors, setFormErrors] = useState({});
-  const [loadingClasses, setLoadingClasses] = useState(true);
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [loadingSessions, setLoadingSessions] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [actionId, setActionId] = useState("");
   const [editingSessionId, setEditingSessionId] = useState("");
@@ -255,41 +160,56 @@ export default function TrainerDashboardPage() {
   const [statusLoading, setStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState("");
 
-  const trainerClasses = useMemo(
-    () => liveClasses.filter((liveClass) => !user?.email || liveClass.trainerEmail === user.email),
-    [liveClasses, user?.email]
+  const activeSessions = useMemo(
+    () => sessions.filter((session) => !session.isEnded && session.status !== "ended"),
+    [sessions]
   );
-  const courseTitleOptions = useMemo(() => {
-    const options = courseTitleOptionsByCategory[form.category] || courseTitleOptionsByCategory["Trainer Courses"];
-    return form.courseTitle && !options.includes(form.courseTitle)
-      ? [form.courseTitle, ...options]
-      : options;
-  }, [form.category, form.courseTitle]);
 
-  const nextClass = useMemo(() => {
-    const now = Date.now();
-    return [...trainerClasses]
-      .filter((liveClass) => new Date(liveClass.scheduledAt).getTime() >= now)
-      .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))[0];
-  }, [trainerClasses]);
+  const todaysCancelledCount = useMemo(
+    () => sessions.filter((session) => session.isTodayCancelled).length,
+    [sessions]
+  );
+
+  const nextSession = useMemo(
+    () =>
+      [...activeSessions]
+        .filter(
+          (session) =>
+            !session.isPaused &&
+            !session.isTodayCancelled &&
+            session.todayStatus !== "completed_today"
+        )
+        .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)))[0],
+    [activeSessions]
+  );
+
   const trainerActionsLocked = !isTrainerActive;
 
-  const loadTrainerClasses = async ({ silent = false } = {}) => {
-    if (!silent) setLoadingClasses(true);
-    setError("");
+  const loadCourses = async ({ silent = false } = {}) => {
+    if (!silent) setLoadingCourses(true);
     try {
-      const sessions = await getTrainerSessions();
-      setLiveClasses(sessions);
+      const nextCourses = await getTrainerCourses();
+      setCourses(nextCourses);
+      setError("");
     } catch (err) {
-      setError(err?.message || "Unable to load trainer live classes.");
+      setError(err?.message || "Unable to load trainer courses.");
     } finally {
-      if (!silent) setLoadingClasses(false);
+      if (!silent) setLoadingCourses(false);
     }
   };
 
-  useEffect(() => {
-    loadTrainerClasses();
-  }, []);
+  const loadSessions = async ({ silent = false } = {}) => {
+    if (!silent) setLoadingSessions(true);
+    try {
+      const nextSessions = await getTrainerSessions();
+      setSessions(nextSessions);
+      setError("");
+    } catch (err) {
+      setError(err?.message || "Unable to load recurring live sessions.");
+    } finally {
+      if (!silent) setLoadingSessions(false);
+    }
+  };
 
   const loadTrainerStatus = async ({ silent = false } = {}) => {
     if (!silent) setStatusLoading(true);
@@ -305,24 +225,38 @@ export default function TrainerDashboardPage() {
   };
 
   useEffect(() => {
+    loadCourses();
+    loadSessions();
     loadTrainerStatus();
     const intervalId = window.setInterval(() => {
       loadTrainerStatus({ silent: true });
+      loadSessions({ silent: true });
     }, 30000);
     return () => window.clearInterval(intervalId);
   }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => {
-      if (name === "category") {
-        return { ...prev, category: value, courseTitle: "", classTitle: "" };
-      }
-      return { ...prev, [name]: value };
-    });
+    const { name, value, type, checked } = e.target;
+    setForm((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
     setFormErrors((prev) => ({ ...prev, [name]: "" }));
     setMessage("");
     setError("");
+  };
+
+  const validateForm = () => {
+    const required = ["courseId", "title", "description", "startTime", "endTime", "meetingLink"];
+    const nextErrors = required.reduce((acc, key) => {
+      if (!String(form[key] || "").trim()) acc[key] = `${fieldLabels[key]} is required.`;
+      return acc;
+    }, {});
+
+    if (getDurationMinutes(form.startTime, form.endTime) <= 0) {
+      nextErrors.startTime = "Choose a valid start time.";
+      nextErrors.endTime = "End time must be after start time.";
+    }
+
+    setFormErrors(nextErrors);
+    return nextErrors;
   };
 
   const handleThumbnailChange = async (e) => {
@@ -331,6 +265,7 @@ export default function TrainerDashboardPage() {
       toast.warn(INACTIVE_TRAINER_MESSAGE);
       return;
     }
+
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -343,6 +278,7 @@ export default function TrainerDashboardPage() {
       toast.error("Thumbnail must be 5 MB or smaller.");
       return;
     }
+
     const dataUrl = await readImageFile(file);
     setForm((prev) => ({ ...prev, thumbnailPreview: dataUrl, thumbnailFile: file }));
     setMessage("");
@@ -356,72 +292,36 @@ export default function TrainerDashboardPage() {
       toast.warn(INACTIVE_TRAINER_MESSAGE);
       return;
     }
-    const required = [
-      "courseTitle",
-      "category",
-      "description",
-      "classTitle",
-      "scheduledDate",
-      "startTime",
-      "endTime",
-      "meetUrl",
-    ];
-    const nextErrors = required.reduce((acc, key) => {
-      if (!String(form[key] || "").trim()) acc[key] = `${fieldLabels[key]} is required.`;
-      return acc;
-    }, {});
+
+    const nextErrors = validateForm();
     if (Object.keys(nextErrors).length) {
-      setFormErrors(nextErrors);
       const firstError = Object.values(nextErrors)[0];
       setError(firstError);
       toast.error(firstError);
       return;
     }
 
-    const durationMinutes = getDurationMinutes(form.startTime, form.endTime);
-    if (durationMinutes <= 0) {
-      setFormErrors((prev) => ({
-        ...prev,
-        startTime: "Choose a valid start time.",
-        endTime: "End time must be after start time.",
-      }));
-      setError("Please select a valid class time range.");
-      toast.error("Please select a valid class time range.");
-      return;
-    }
-
     setSubmitting(true);
     setError("");
     try {
-      const payload = {
-        courseTitle: String(form.courseTitle || "").trim(),
-        category: String(form.category || "").trim(),
-        description: String(form.description || "").trim(),
-        classTitle: String(form.classTitle || "").trim(),
-        scheduledDate: form.scheduledDate,
-        startTime: form.startTime,
-        endTime: form.endTime,
-        meetingLink: String(form.meetUrl || "").trim(),
-        thumbnailFile: form.thumbnailFile,
-      };
-
       if (editingSessionId) {
-        await updateTrainerSession(editingSessionId, payload);
+        await updateTrainerSession(editingSessionId, form);
       } else {
-        await createTrainerSession(payload);
+        await createTrainerSession(form);
       }
+
       const successMessage = editingSessionId
-        ? "Live class updated successfully."
-        : "Live class created successfully.";
+        ? "Recurring live session updated successfully."
+        : "Daily recurring live session created successfully.";
       setForm(initialForm);
       setFormErrors({});
       setEditingSessionId("");
       setMessage(successMessage);
       toast.success(successMessage);
-      setActiveTab("classes");
-      await loadTrainerClasses({ silent: true });
+      setActiveTab("sessions");
+      await loadSessions({ silent: true });
     } catch (err) {
-      const errorMessage = err?.message || "Unable to create live class.";
+      const errorMessage = err?.message || "Unable to save recurring live session.";
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -429,30 +329,42 @@ export default function TrainerDashboardPage() {
     }
   };
 
-  const startEditingSession = (liveClass) => {
+  const startEditingSession = async (session) => {
     if (trainerActionsLocked) {
       setError(INACTIVE_TRAINER_MESSAGE);
       toast.warn(INACTIVE_TRAINER_MESSAGE);
       return;
     }
-    setEditingSessionId(liveClass.id);
-    setForm({
-      courseTitle: liveClass.courseTitle || liveClass.courseName || "",
-      category: liveClass.category || liveClass.tab || "Trainer Courses",
-      description: liveClass.description || "",
-      classTitle: liveClass.classTitle || liveClass.title || "",
-      scheduledDate: liveClass.scheduledDate || "",
-      startTime: liveClass.startTime || "",
-      endTime: liveClass.endTime || "",
-      meetUrl: liveClass.meetingLink || liveClass.meetUrl || "",
-      price: "499",
-      thumbnailPreview: liveClass.thumbnail || "",
-      thumbnailFile: null,
-    });
-    setMessage("");
-    setError("");
-    setFormErrors({});
-    setActiveTab("create");
+
+    setActionId(`edit:${session.id}`);
+    try {
+      const details = await getTrainerSession(session.id);
+      setEditingSessionId(details.id);
+      setForm({
+        courseId: details.courseId,
+        title: details.title,
+        subtitle: details.subtitle,
+        description: details.description,
+        startTime: details.startTime,
+        endTime: details.endTime,
+        timezone: details.timezone || "Asia/Kolkata",
+        meetingLink: details.meetingLink,
+        thumbnailPreview: details.thumbnail || "",
+        thumbnailFile: null,
+        isRecurring: details.isRecurring !== false,
+        recurrenceType: details.recurrenceType || "daily",
+      });
+      setMessage("");
+      setError("");
+      setFormErrors({});
+      setActiveTab("create");
+    } catch (err) {
+      const errorMessage = err?.message || "Unable to load session details.";
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setActionId("");
+    }
   };
 
   const cancelEditing = () => {
@@ -463,6 +375,49 @@ export default function TrainerDashboardPage() {
     setFormErrors({});
   };
 
+  const updateSessionAction = async (sessionId, action, reason = "") => {
+    if (!sessionId) return;
+    if (trainerActionsLocked) {
+      setError(INACTIVE_TRAINER_MESSAGE);
+      toast.warn(INACTIVE_TRAINER_MESSAGE);
+      return;
+    }
+
+    setActionId(`${action}:${sessionId}`);
+    setError("");
+    setMessage("");
+    try {
+      if (action === "pause") {
+        await pauseTrainerSession(sessionId);
+        toast.success("Recurring session paused.");
+      } else if (action === "resume") {
+        await resumeTrainerSession(sessionId);
+        toast.success("Recurring session resumed.");
+      } else if (action === "end") {
+        await endTrainerSession(sessionId);
+        toast.success("Recurring session ended permanently.");
+      } else if (action === "delete") {
+        await deleteTrainerSession(sessionId);
+        toast.success("Recurring session deleted.");
+      } else if (action === "cancelToday") {
+        await cancelTodayTrainerSession(sessionId, reason.trim());
+        toast.success("Today's class cancelled.");
+      } else if (action === "restoreToday") {
+        await restoreTodayTrainerSession(sessionId);
+        toast.success("Today's class restored.");
+      }
+
+      setMessage("Session updated successfully.");
+      await loadSessions({ silent: true });
+    } catch (err) {
+      const errorMessage = err?.message || "Unable to update recurring session.";
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setActionId("");
+    }
+  };
+
   const openSessionDialog = (sessionId, action) => {
     if (!sessionId) return;
     if (trainerActionsLocked) {
@@ -470,61 +425,40 @@ export default function TrainerDashboardPage() {
       toast.warn(INACTIVE_TRAINER_MESSAGE);
       return;
     }
-    if (action === "cancel") {
+
+    if (action === "cancelToday") {
       setConfirmDialog({
         open: true,
         action,
         sessionId,
-        title: "Cancel live class",
-        message: "Share a short reason. This status will be saved to the live session.",
+        title: "Cancel today's class",
+        message: "Only today's class will be cancelled. The daily recurring session will continue tomorrow.",
         reason: "",
       });
       return;
     }
+
+    if (action === "end") {
+      setConfirmDialog({
+        open: true,
+        action,
+        sessionId,
+        title: "End recurring session",
+        message: "This permanently ends the daily session. Use pause if you only need a temporary stop.",
+        reason: "",
+      });
+      return;
+    }
+
     if (action === "delete") {
       setConfirmDialog({
         open: true,
         action,
         sessionId,
-        title: "Delete live class",
-        message: "This will permanently delete the live class from the database.",
+        title: "Delete recurring session",
+        message: "This permanently deletes the session record. Use end if you want to keep the history but stop future classes.",
         reason: "",
       });
-    }
-  };
-
-  const updateSessionStatus = async (sessionId, action, reason = "") => {
-    if (!sessionId) return;
-    if (trainerActionsLocked) {
-      setError(INACTIVE_TRAINER_MESSAGE);
-      toast.warn(INACTIVE_TRAINER_MESSAGE);
-      return;
-    }
-    setActionId(`${action}:${sessionId}`);
-    setError("");
-    setMessage("");
-    try {
-      if (action === "publish") {
-        await publishTrainerSession(sessionId);
-        setMessage("Live class published successfully.");
-        toast.success("Live class published successfully.");
-      } else if (action === "cancel") {
-        if (!reason || !reason.trim()) return;
-        await cancelTrainerSession(sessionId, reason.trim());
-        setMessage("Live class cancelled successfully.");
-        toast.success("Live class cancelled successfully.");
-      } else if (action === "delete") {
-        await deleteTrainerSession(sessionId);
-        setMessage("Live class deleted successfully.");
-        toast.success("Live class deleted successfully.");
-      }
-      await loadTrainerClasses({ silent: true });
-    } catch (err) {
-      const errorMessage = err?.message || "Unable to update live class.";
-      setError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setActionId("");
     }
   };
 
@@ -534,14 +468,14 @@ export default function TrainerDashboardPage() {
 
   const confirmSessionDialog = async () => {
     if (!confirmDialog.open) return;
-    if (confirmDialog.action === "cancel" && !confirmDialog.reason.trim()) {
-      setError("Please enter a cancellation reason.");
-      toast.error("Please enter a cancellation reason.");
+    if (confirmDialog.action === "cancelToday" && !confirmDialog.reason.trim()) {
+      setError("Please enter a reason for cancelling today's class.");
+      toast.error("Please enter a reason for cancelling today's class.");
       return;
     }
     const { sessionId, action, reason } = confirmDialog;
     closeSessionDialog();
-    await updateSessionStatus(sessionId, action, reason);
+    await updateSessionAction(sessionId, action, reason);
   };
 
   const logout = async () => {
@@ -558,11 +492,11 @@ export default function TrainerDashboardPage() {
         setMobileSidebarOpen(false);
       }}
       className={[
-        "w-full h-11 rounded-xl px-0 lg:px-4 text-sm font-extrabold inline-flex items-center justify-center gap-3 transition-colors",
+        "w-full h-11 rounded-xl text-sm font-extrabold inline-flex items-center justify-center gap-3 transition-colors",
         activeTab === id
           ? "bg-white text-[#00342b]"
           : "text-white/70 hover:bg-white/10 hover:text-white",
-        sidebarCollapsed ? "justify-center" : "justify-start px-4",
+        sidebarCollapsed ? "lg:px-0" : "px-4 justify-start",
       ].join(" ")}
       title={label}
     >
@@ -582,33 +516,26 @@ export default function TrainerDashboardPage() {
 
   return (
     <main className="h-dvh overflow-hidden bg-[#f4f7f6] text-slate-950">
-      <ToastContainer
-        position="top-right"
-        autoClose={3200}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        theme="colored"
-      />
+      <ToastContainer position="top-right" autoClose={3200} newestOnTop closeOnClick pauseOnHover theme="colored" />
+
       {confirmDialog.open ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-4">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-950">{confirmDialog.title}</h2>
-                <p className="mt-1 text-sm text-slate-500 leading-relaxed">{confirmDialog.message}</p>
+                <p className="mt-1 text-sm leading-relaxed text-slate-500">{confirmDialog.message}</p>
               </div>
               <button
                 type="button"
                 onClick={closeSessionDialog}
-                className="w-9 h-9 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100"
                 aria-label="Close dialog"
               >
                 <FiX />
               </button>
             </div>
-            {confirmDialog.action === "cancel" ? (
+            {confirmDialog.action === "cancelToday" ? (
               <div className="px-5 py-4">
                 <label className="block">
                   <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">
@@ -620,34 +547,41 @@ export default function TrainerDashboardPage() {
                       setConfirmDialog((prev) => ({ ...prev, reason: e.target.value }))
                     }
                     rows={3}
-                    placeholder="Example: Trainer is unavailable today."
-                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#006b58] focus:ring-4 focus:ring-emerald-900/5 resize-none"
+                    placeholder="Example: Trainer unavailable today."
+                    className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#006b58] focus:ring-4 focus:ring-emerald-900/5"
                   />
                 </label>
               </div>
             ) : null}
-            <div className="px-5 py-4 bg-slate-50 flex flex-col sm:flex-row justify-end gap-2">
+            <div className="flex flex-col justify-end gap-2 bg-slate-50 px-5 py-4 sm:flex-row">
               <button
                 type="button"
                 onClick={closeSessionDialog}
-                className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-extrabold text-slate-600"
+                className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-600"
               >
-                Keep class
+                Keep session
               </button>
               <button
                 type="button"
                 onClick={confirmSessionDialog}
                 className={[
-                  "h-10 px-5 rounded-xl text-sm font-extrabold text-white",
-                  confirmDialog.action === "delete" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700",
+                  "h-10 rounded-xl px-5 text-sm font-extrabold text-white",
+                  confirmDialog.action === "end" || confirmDialog.action === "delete"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-amber-600 hover:bg-amber-700",
                 ].join(" ")}
               >
-                {confirmDialog.action === "delete" ? "Delete class" : "Cancel class"}
+                {confirmDialog.action === "delete"
+                  ? "Delete session"
+                  : confirmDialog.action === "end"
+                    ? "End permanently"
+                    : "Cancel today"}
               </button>
             </div>
           </div>
         </div>
       ) : null}
+
       <div
         className={[
           "grid h-full min-h-0 grid-cols-1 transition-[grid-template-columns] duration-300",
@@ -665,27 +599,26 @@ export default function TrainerDashboardPage() {
 
         <aside
           className={[
-            "fixed lg:static inset-y-0 left-0 z-50 lg:z-auto h-dvh min-h-0 bg-[#00342b] text-white p-5 flex flex-col overflow-hidden transition-transform duration-300",
-            mobileSidebarOpen ? "translate-x-0 w-[280px]" : "-translate-x-full w-[280px]",
-            "lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-50 flex h-dvh min-h-0 w-[280px] flex-col overflow-hidden bg-[#00342b] p-5 text-white transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0",
+            mobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
             sidebarCollapsed ? "lg:w-[92px]" : "lg:w-auto",
           ].join(" ")}
         >
           <div className={["flex items-center gap-3", sidebarCollapsed ? "justify-center" : "justify-between"].join(" ")}>
             {sidebarCollapsed ? (
-              <div className="hidden lg:flex w-11 h-11 rounded-2xl bg-white/10 items-center justify-center text-sm font-black">
+              <div className="hidden h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-black lg:flex">
                 LS
               </div>
             ) : (
               <div className="min-w-0">
                 <div className="text-2xl font-extrabold leading-none">LurnStack</div>
-                <div className="mt-1 text-xs text-white/60 font-semibold">Trainer Portal</div>
+                <div className="mt-1 text-xs font-semibold text-white/60">Trainer Portal</div>
               </div>
             )}
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(false)}
-              className="lg:hidden w-11 h-11 rounded-xl bg-white/10 text-white inline-flex items-center justify-center hover:bg-white/15 transition-colors flex-shrink-0"
+              className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white/10 text-white transition-colors hover:bg-white/15 lg:hidden"
               title="Close sidebar"
             >
               <FiX />
@@ -693,7 +626,7 @@ export default function TrainerDashboardPage() {
             <button
               type="button"
               onClick={() => setSidebarCollapsed((v) => !v)}
-              className="hidden lg:inline-flex w-11 h-11 rounded-xl bg-white/10 text-white items-center justify-center hover:bg-white/15 transition-colors flex-shrink-0"
+              className="hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white/10 text-white transition-colors hover:bg-white/15 lg:inline-flex"
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               <FiSidebar />
@@ -704,19 +637,19 @@ export default function TrainerDashboardPage() {
 
           <div className={["mt-auto rounded-2xl bg-white/10 p-2 lg:p-4", sidebarCollapsed ? "lg:px-2" : ""].join(" ")}>
             {sidebarCollapsed ? (
-              <div className="mx-auto w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-sm font-extrabold">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-sm font-extrabold">
                 {(user?.fullName || "T").slice(0, 1).toUpperCase()}
               </div>
             ) : (
               <>
-                <div className="text-sm font-extrabold truncate">{user?.fullName || "Trainer"}</div>
-                <div className="mt-1 text-xs text-white/60 break-all line-clamp-2">{user?.email}</div>
+                <div className="truncate text-sm font-extrabold">{user?.fullName || "Trainer"}</div>
+                <div className="mt-1 break-all text-xs text-white/60">{user?.email}</div>
               </>
             )}
             <button
               type="button"
               onClick={logout}
-              className="mt-4 h-10 w-full rounded-xl border border-white/20 text-sm font-extrabold inline-flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
+              className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/20 text-sm font-extrabold transition-colors hover:bg-white/10"
               title="Log out"
             >
               <FiLogOut />
@@ -725,62 +658,51 @@ export default function TrainerDashboardPage() {
           </div>
         </aside>
 
-        <section className="min-w-0 h-dvh min-h-0 flex flex-col overflow-hidden">
-          <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 sm:py-5 flex-shrink-0">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <section className="flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden">
+          <header className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-8 sm:py-5">
+            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
               <div className="flex items-start gap-3">
                 <button
                   type="button"
                   onClick={() => setMobileSidebarOpen(true)}
-                  className="lg:hidden mt-0.5 w-11 h-11 rounded-xl bg-[#00342b] text-white inline-flex items-center justify-center flex-shrink-0"
+                  className="mt-0.5 inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-[#00342b] text-white lg:hidden"
                   aria-label="Open trainer sidebar"
                 >
                   <FiMenu />
                 </button>
                 <div>
-                  <div className="lg:hidden text-xs font-extrabold uppercase tracking-[0.18em] text-[#006b58]">
+                  <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#006b58] lg:hidden">
                     Trainer Portal
                   </div>
-                  <h1 className="text-xl sm:text-3xl font-extrabold text-slate-950 leading-tight">
-                    Live class management
+                  <h1 className="text-xl font-extrabold leading-tight text-slate-950 sm:text-3xl">
+                    Daily recurring live sessions
                   </h1>
-                  <p className="mt-1 text-xs sm:text-sm text-slate-500 leading-relaxed">
-                    Create trainer-led classes and publish them directly to student Courses, Categories, and Live Classes.
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm">
+                    Create one live session once, then run it every day at the selected time.
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span
                       className={[
-                        "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider border",
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider",
                         statusLoading
-                          ? "bg-slate-50 text-slate-600 border-slate-200"
+                          ? "border-slate-200 bg-slate-50 text-slate-600"
                           : isTrainerActive
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                            : "bg-amber-50 text-amber-700 border-amber-100",
+                            ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                            : "border-amber-100 bg-amber-50 text-amber-700",
                       ].join(" ")}
                     >
                       {statusLoading ? "Checking status" : isTrainerActive ? "Active trainer" : "Inactive trainer"}
                     </span>
-                    {statusError ? (
-                      <span className="text-xs font-semibold text-red-600">{statusError}</span>
-                    ) : null}
+                    {statusError ? <span className="text-xs font-semibold text-red-600">{statusError}</span> : null}
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={logout}
-                className="lg:hidden h-10 px-4 rounded-xl border border-slate-200 text-sm font-extrabold inline-flex items-center justify-center gap-2"
-              >
-                <FiLogOut />
-                Log out
-              </button>
             </div>
-
           </header>
 
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 lg:p-8">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8">
             {trainerActionsLocked ? (
-              <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 flex items-start gap-3">
+              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
                 <FiAlertCircle className="mt-0.5 flex-shrink-0" />
                 <span>{INACTIVE_TRAINER_MESSAGE}</span>
               </div>
@@ -788,77 +710,45 @@ export default function TrainerDashboardPage() {
 
             {activeTab === "overview" ? (
               <div className="space-y-6">
-                <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {[
-                    ["Published classes", trainerClasses.length, FiVideo],
-                    ["Live API status", loadingClasses ? "Syncing" : "Connected", FiUsers],
-                    ["Account status", statusLoading ? "Checking" : isTrainerActive ? "Active" : "Inactive", FiCheckCircle],
-                    ["Next class", nextClass ? formatClassTime(nextClass.scheduledAt) : "Not scheduled", FiClock],
+                    ["Courses", loadingCourses ? "Syncing" : courses.length, FiBookOpen],
+                    ["Recurring sessions", loadingSessions ? "Syncing" : sessions.length, FiCalendar],
+                    ["Cancelled today", todaysCancelledCount, FiXCircle],
+                    ["Next daily class", nextSession ? formatTime(nextSession.startTime, nextSession.timezone) : "Not scheduled", FiClock],
                   ].map(([label, value, Icon]) => (
-                    <div key={label} className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
-                      <Icon className="text-[#006b58] text-xl" />
+                    <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <Icon className="text-xl text-[#006b58]" />
                       <div className="mt-4 text-xl font-extrabold">{value}</div>
                       <div className="mt-1 text-sm font-semibold text-slate-500">{label}</div>
                     </div>
                   ))}
                 </section>
 
-                <section className="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-sm">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-2xl bg-[#00342b] text-white flex items-center justify-center text-2xl font-black">
-                        {(user?.fullName || "T").slice(0, 1).toUpperCase()}
-                      </div>
-                      <div>
-                        <h2 className="text-xl font-extrabold text-slate-950">{user?.fullName || "Trainer"}</h2>
-                        <p className="mt-1 text-sm font-semibold text-slate-500 break-all">{user?.email || "No email available"}</p>
-                        {user?.phoneNumber ? (
-                          <p className="mt-1 text-sm font-semibold text-slate-500">{user.phoneNumber}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <div className="text-xs font-black uppercase tracking-widest text-slate-500">Trainer access</div>
-                      <div
-                        className={[
-                          "mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider border",
-                          isTrainerActive
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                            : "bg-amber-50 text-amber-700 border-amber-100",
-                        ].join(" ")}
-                      >
-                        {isTrainerActive ? "Creation enabled" : "Creation locked"}
-                      </div>
-                      <p className="mt-2 max-w-sm text-xs leading-relaxed text-slate-500">
-                        Admin activation controls whether this trainer can create or manage live sessions.
-                      </p>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                  <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
                     <div>
-                      <h2 className="text-xl font-extrabold">Publishing flow</h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        A single upload creates the student-facing course card, category listing, course details live-class block, and student live-class card.
+                      <h2 className="text-xl font-extrabold text-slate-950">Recurring session flow</h2>
+                      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
+                        Trainers create one session, set the daily start and end time, and reuse the same meeting
+                        link every day. For exceptions, pause the whole recurring session or cancel only today's class.
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setActiveTab("create")}
                       disabled={trainerActionsLocked}
-                      className="h-11 px-5 rounded-xl bg-[#00342b] text-white text-sm font-extrabold inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#00342b] px-5 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <FiPlusCircle />
-                      Create class
+                      Create daily session
                     </button>
                   </div>
 
-                  <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-3">
-                    {["Upload thumbnail", "Add class details", "Publish", "Students view"].map((item, index) => (
-                      <div key={item} className="rounded-xl bg-slate-50 border border-slate-100 p-4">
-                        <div className="w-8 h-8 rounded-full bg-[#00342b] text-white flex items-center justify-center text-sm font-extrabold">
+                  <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-4">
+                    {["Select course", "Set daily time", "Share meeting link", "Manage exceptions"].map((item, index) => (
+                      <div key={item} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00342b] text-sm font-extrabold text-white">
                           {index + 1}
                         </div>
                         <div className="mt-3 text-sm font-extrabold">{item}</div>
@@ -870,23 +760,18 @@ export default function TrainerDashboardPage() {
             ) : null}
 
             {activeTab === "create" ? (
-              <form
-                onSubmit={handleSubmit}
-                className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-sm"
-              >
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-[#00342b] text-white flex items-center justify-center">
-                      <FiUploadCloud className="text-xl" />
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#00342b] text-white">
+                      <FiCalendar className="text-xl" />
                     </div>
                     <div>
                       <h2 className="text-xl font-extrabold">
-                        {editingSessionId ? "Edit live class" : "Create live class"}
+                        {editingSessionId ? "Edit daily recurring session" : "Create daily recurring session"}
                       </h2>
                       <p className="text-sm text-slate-500">
-                        {editingSessionId
-                          ? "Update the class details that students will see."
-                          : "Upload a thumbnail and class details for the student course pages."}
+                        One setup creates a daily class. Trainers can pause it or cancel only today's class later.
                       </p>
                     </div>
                   </div>
@@ -894,172 +779,11 @@ export default function TrainerDashboardPage() {
                     <button
                       type="button"
                       onClick={cancelEditing}
-                      className="h-10 px-4 rounded-xl border border-slate-200 text-sm font-extrabold text-slate-600 hover:border-red-200 hover:text-red-700 transition-colors"
+                      className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-extrabold text-slate-600 transition-colors hover:border-red-200 hover:text-red-700"
                     >
                       Cancel edit
                     </button>
                   ) : null}
-                  {message ? (
-                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">
-                      {message}
-                    </div>
-                  ) : null}
-                  {error ? (
-                    <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 flex items-start gap-2">
-                      <FiAlertCircle className="mt-0.5 flex-shrink-0" />
-                      <span>{error}</span>
-                    </div>
-                  ) : null}
-                  {trainerActionsLocked ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 flex items-start gap-2">
-                      <FiAlertCircle className="mt-0.5 flex-shrink-0" />
-                      <span>{INACTIVE_TRAINER_MESSAGE}</span>
-                    </div>
-                  ) : null}
-                </div>
-
-                <fieldset
-                  disabled={trainerActionsLocked || submitting}
-                  className="mt-6 grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-6 items-start disabled:opacity-60"
-                >
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 xl:sticky xl:top-0">
-                    <div className="aspect-[16/10] rounded-xl overflow-hidden bg-white border border-slate-200">
-                      {form.thumbnailPreview ? (
-                        <img src={form.thumbnailPreview} alt="Class thumbnail preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-emerald-950 via-teal-800 to-cyan-600 flex flex-col items-center justify-center text-white">
-                          <FiImage className="text-4xl opacity-80" />
-                          <div className="mt-2 text-sm font-extrabold">Thumbnail preview</div>
-                        </div>
-                      )}
-                    </div>
-                    <label className="mt-4 h-11 rounded-xl bg-white border border-slate-200 text-sm font-extrabold text-slate-700 flex items-center justify-center gap-2 cursor-pointer hover:border-[#006b58] transition-colors">
-                      <FiImage />
-                      Upload thumbnail
-                      <input type="file" accept="image/*" onChange={handleThumbnailChange} className="hidden" />
-                    </label>
-                    <p className="mt-2 text-xs text-slate-500">
-                      This image appears on student course cards and live class cards.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="sm:col-span-2">
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Course title</span>
-                      <select name="courseTitle" value={form.courseTitle} onChange={handleChange} className={fieldClass("courseTitle", "mt-1 w-full h-11 rounded-xl px-4 text-sm outline-none bg-white")}>
-                        <option value="">Select course title</option>
-                        {courseTitleOptions.map((title) => (
-                          <option key={title} value={title}>
-                            {title}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors.courseTitle ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.courseTitle}</p> : null}
-                    </label>
-
-                    <label>
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Category</span>
-                      <select name="category" value={form.category} onChange={handleChange} className={fieldClass("category", "mt-1 w-full h-11 rounded-xl px-4 text-sm outline-none bg-white")}>
-                        {categoryOptions.map((category) => (
-                          <option key={category} value={category}>
-                            {category}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors.category ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.category}</p> : null}
-                    </label>
-
-                    <label className="sm:col-span-2">
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Course description</span>
-                      <textarea name="description" value={form.description} onChange={handleChange} rows={3} placeholder="What will students learn in this class?" className={fieldClass("description", "mt-1 w-full rounded-xl px-4 py-3 text-sm outline-none resize-none")} />
-                      {formErrors.description ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.description}</p> : null}
-                    </label>
-
-                    <label className="sm:col-span-2">
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Live class title</span>
-                      <input name="classTitle" value={form.classTitle} onChange={handleChange} placeholder="Example: React Hooks and State Management" className={fieldClass("classTitle", "mt-1 w-full h-11 rounded-xl px-4 text-sm outline-none")} />
-                      {formErrors.classTitle ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.classTitle}</p> : null}
-                    </label>
-
-                    <label>
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Date</span>
-                      <input name="scheduledDate" type="date" value={form.scheduledDate} onChange={handleChange} className={fieldClass("scheduledDate", "mt-1 w-full h-11 rounded-xl px-4 text-sm outline-none")} />
-                      {formErrors.scheduledDate ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.scheduledDate}</p> : null}
-                    </label>
-
-                    <label>
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Start time</span>
-                      <input name="startTime" type="time" value={form.startTime} onChange={handleChange} className={fieldClass("startTime", "mt-1 w-full h-11 rounded-xl px-4 text-sm outline-none")} />
-                      {formErrors.startTime ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.startTime}</p> : null}
-                    </label>
-
-                    <label>
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">End time</span>
-                      <input name="endTime" type="time" value={form.endTime} onChange={handleChange} className={fieldClass("endTime", "mt-1 w-full h-11 rounded-xl px-4 text-sm outline-none")} />
-                      {formErrors.endTime ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.endTime}</p> : null}
-                    </label>
-
-                    {form.startTime && form.endTime ? (
-                      <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-extrabold text-emerald-950">
-                        Class timing: {formatTimeOnly(`2026-01-01T${form.startTime}:00+05:30`)} to {formatTimeOnly(`2026-01-01T${form.endTime}:00+05:30`)}
-                      </div>
-                    ) : null}
-
-                    <label>
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Meeting link</span>
-                      <input name="meetUrl" type="url" value={form.meetUrl} onChange={handleChange} placeholder="https://meet.google.com/..." className={fieldClass("meetUrl", "mt-1 w-full h-11 rounded-xl px-4 text-sm outline-none")} />
-                      {formErrors.meetUrl ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.meetUrl}</p> : null}
-                    </label>
-                  </div>
-                </fieldset>
-
-                <button
-                  type="submit"
-                  disabled={submitting || trainerActionsLocked}
-                  className="mt-6 w-full h-12 rounded-xl bg-[#00342b] text-white text-sm font-extrabold inline-flex items-center justify-center gap-2 hover:bg-[#004d40] transition-colors disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {submitting ? (
-                    <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  ) : (
-                    <FiCheckCircle className="text-lg" />
-                  )}
-                  {submitting
-                    ? editingSessionId
-                      ? "Updating live class..."
-                      : "Creating live class..."
-                    : editingSessionId
-                      ? "Update live class"
-                      : "Create live class"}
-                </button>
-              </form>
-            ) : null}
-
-            {activeTab === "classes" ? (
-              <section className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-extrabold">Uploaded live classes</h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      These classes are visible on the student Courses, Categories, Course Details, and Live Classes pages.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("create")}
-                    disabled={trainerActionsLocked}
-                    className="h-11 px-5 rounded-xl bg-[#00342b] text-white text-sm font-extrabold inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <FiPlusCircle />
-                    New class
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => loadTrainerClasses()}
-                    className="h-11 px-5 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-extrabold inline-flex items-center justify-center gap-2 hover:border-[#006b58] transition-colors"
-                  >
-                    <FiRefreshCw className={loadingClasses ? "animate-spin" : ""} />
-                    Refresh
-                  </button>
                 </div>
 
                 {message ? (
@@ -1068,119 +792,385 @@ export default function TrainerDashboardPage() {
                   </div>
                 ) : null}
                 {error ? (
-                  <div className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 flex items-start gap-2">
+                  <div className="mt-5 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
                     <FiAlertCircle className="mt-0.5 flex-shrink-0" />
                     <span>{error}</span>
                   </div>
                 ) : null}
 
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {loadingClasses ? (
-                    <div className="md:col-span-2 xl:col-span-3 rounded-2xl bg-slate-50 border border-slate-100 p-8 text-center">
-                      <span className="mx-auto block w-8 h-8 rounded-full border-2 border-slate-200 border-t-[#00342b] animate-spin" />
-                      <div className="mt-3 text-lg font-extrabold">Loading live classes</div>
-                      <p className="mt-1 text-sm text-slate-500">Fetching your trainer sessions securely.</p>
+                <fieldset
+                  disabled={trainerActionsLocked || submitting}
+                  className="mt-6 grid grid-cols-1 gap-4 disabled:opacity-60 sm:grid-cols-2"
+                >
+                  <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr] lg:items-center">
+                      <div className="aspect-[16/9] overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        {form.thumbnailPreview ? (
+                          <img
+                            src={form.thumbnailPreview}
+                            alt="Session thumbnail preview"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-emerald-950 via-teal-800 to-cyan-600 text-white">
+                            <FiImage className="text-4xl opacity-80" />
+                            <div className="mt-2 text-sm font-extrabold">Thumbnail preview</div>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-xs font-extrabold uppercase tracking-widest text-slate-500">
+                          Session thumbnail
+                        </div>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                          Add a thumbnail for this daily live session. It helps students identify the course session quickly.
+                        </p>
+                        <label className="mt-4 inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-extrabold text-slate-700 transition-colors hover:border-[#006b58]">
+                          <FiUploadCloud />
+                          Upload thumbnail
+                          <input type="file" accept="image/*" onChange={handleThumbnailChange} className="hidden" />
+                        </label>
+                        <p className="mt-2 text-xs text-slate-500">Image only. Maximum size 5 MB.</p>
+                      </div>
                     </div>
-                  ) : trainerClasses.length === 0 ? (
-                    <div className="md:col-span-2 xl:col-span-3 rounded-2xl bg-slate-50 border border-slate-100 p-8 text-center">
-                      <FiVideo className="mx-auto text-4xl text-slate-300" />
-                      <div className="mt-3 text-lg font-extrabold">No classes uploaded yet</div>
-                      <p className="mt-1 text-sm text-slate-500">Create your first live class to publish it for students.</p>
+                  </div>
+
+                  <label className="sm:col-span-2">
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Course</span>
+                    <select
+                      name="courseId"
+                      value={form.courseId}
+                      onChange={handleChange}
+                      className={fieldClass("courseId", "mt-1 h-11 w-full rounded-xl bg-white px-4 text-sm outline-none")}
+                    >
+                      <option value="">{loadingCourses ? "Loading courses..." : "Select trainer course"}</option>
+                      {courses.map((course) => (
+                        <option key={course.id} value={course.id}>
+                          {course.title}
+                        </option>
+                      ))}
+                    </select>
+                    {formErrors.courseId ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.courseId}</p> : null}
+                    <p className="mt-1 text-xs text-slate-500">
+                      Courses load from the trainer courses API. If that endpoint is not ready, development course options are shown.
+                    </p>
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Session title</span>
+                    <input
+                      name="title"
+                      value={form.title}
+                      onChange={handleChange}
+                      placeholder="React Live Class"
+                      className={fieldClass("title", "mt-1 h-11 w-full rounded-xl px-4 text-sm outline-none")}
+                    />
+                    {formErrors.title ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.title}</p> : null}
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Subtitle</span>
+                    <input
+                      name="subtitle"
+                      value={form.subtitle}
+                      onChange={handleChange}
+                      placeholder="Daily practical session"
+                      className={fieldClass("subtitle", "mt-1 h-11 w-full rounded-xl px-4 text-sm outline-none")}
+                    />
+                  </label>
+
+                  <label className="sm:col-span-2">
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Description</span>
+                    <textarea
+                      name="description"
+                      value={form.description}
+                      onChange={handleChange}
+                      rows={3}
+                      placeholder="Live session description"
+                      className={fieldClass("description", "mt-1 w-full resize-none rounded-xl px-4 py-3 text-sm outline-none")}
+                    />
+                    {formErrors.description ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.description}</p> : null}
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Start time</span>
+                    <input
+                      name="startTime"
+                      type="time"
+                      value={form.startTime}
+                      onChange={handleChange}
+                      className={fieldClass("startTime", "mt-1 h-11 w-full rounded-xl px-4 text-sm outline-none")}
+                    />
+                    {formErrors.startTime ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.startTime}</p> : null}
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">End time</span>
+                    <input
+                      name="endTime"
+                      type="time"
+                      value={form.endTime}
+                      onChange={handleChange}
+                      className={fieldClass("endTime", "mt-1 h-11 w-full rounded-xl px-4 text-sm outline-none")}
+                    />
+                    {formErrors.endTime ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.endTime}</p> : null}
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Timezone</span>
+                    <select
+                      name="timezone"
+                      value={form.timezone}
+                      onChange={handleChange}
+                      className={fieldClass("timezone", "mt-1 h-11 w-full rounded-xl bg-white px-4 text-sm outline-none")}
+                    >
+                      <option value="Asia/Kolkata">Asia/Kolkata</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Meeting link</span>
+                    <input
+                      name="meetingLink"
+                      type="url"
+                      value={form.meetingLink}
+                      onChange={handleChange}
+                      placeholder="https://meet.google.com/xxx"
+                      className={fieldClass("meetingLink", "mt-1 h-11 w-full rounded-xl px-4 text-sm outline-none")}
+                    />
+                    {formErrors.meetingLink ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.meetingLink}</p> : null}
+                  </label>
+
+                  <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-extrabold text-emerald-950">
+                    Recurrence: Daily, {form.startTime && form.endTime ? `${formatTime(form.startTime)} to ${formatTime(form.endTime)}` : "time not set"}
+                  </div>
+                </fieldset>
+
+                <button
+                  type="submit"
+                  disabled={submitting || trainerActionsLocked}
+                  className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#00342b] text-sm font-extrabold text-white transition-colors hover:bg-[#004d40] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {submitting ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  ) : (
+                    <FiCheckCircle className="text-lg" />
+                  )}
+                  {submitting
+                    ? editingSessionId
+                      ? "Updating recurring session..."
+                      : "Creating recurring session..."
+                    : editingSessionId
+                      ? "Update recurring session"
+                      : "Create daily session"}
+                </button>
+              </form>
+            ) : null}
+
+            {activeTab === "sessions" ? (
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                  <div>
+                    <h2 className="text-xl font-extrabold">Recurring live sessions</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Manage daily sessions without creating a new class every day.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("create")}
+                      disabled={trainerActionsLocked}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#00342b] px-5 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FiPlusCircle />
+                      New daily session
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => loadSessions()}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-extrabold text-slate-700 transition-colors hover:border-[#006b58]"
+                    >
+                      <FiRefreshCw className={loadingSessions ? "animate-spin" : ""} />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {message ? (
+                  <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">
+                    {message}
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="mt-5 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                    <FiAlertCircle className="mt-0.5 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                ) : null}
+
+                <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  {loadingSessions ? (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-8 text-center xl:col-span-2">
+                      <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#00342b]" />
+                      <div className="mt-3 text-lg font-extrabold">Loading recurring sessions</div>
+                      <p className="mt-1 text-sm text-slate-500">Fetching your daily live session setup.</p>
+                    </div>
+                  ) : sessions.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-8 text-center xl:col-span-2">
+                      <FiCalendar className="mx-auto text-4xl text-slate-300" />
+                      <div className="mt-3 text-lg font-extrabold">No recurring sessions yet</div>
+                      <p className="mt-1 text-sm text-slate-500">Create one daily session and reuse it every day.</p>
                     </div>
                   ) : (
-                    trainerClasses.map((liveClass) => (
-                      <article key={liveClass.id} className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-                        <div className="aspect-[16/9] bg-slate-100">
-                          <SmartImage
-                            src={liveClass.thumbnail}
-                            alt={liveClass.title}
-                            className="w-full h-full object-cover"
-                            fallbackClassName="w-full h-full bg-gradient-to-br from-emerald-950 via-teal-800 to-cyan-600"
-                          />
-                        </div>
-                        <div className="p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#006b58] truncate">
-                                {liveClass.courseName}
+                    sessions.map((session) => {
+                      const status = getSessionStatus(session);
+                      const lockedSession = trainerActionsLocked || session.isEnded || session.status === "ended";
+                      return (
+                        <article key={session.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                          <div className="aspect-[16/9] bg-slate-100">
+                            {session.thumbnail ? (
+                              <img
+                                src={session.thumbnail}
+                                alt={session.title}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-emerald-950 via-teal-800 to-cyan-600 text-white">
+                                <FiImage className="text-4xl opacity-80" />
+                                <div className="mt-2 text-sm font-extrabold">Daily live session</div>
                               </div>
-                              <h3 className="mt-1 text-base font-extrabold text-slate-950 line-clamp-2">
-                                {liveClass.title}
-                              </h3>
+                            )}
+                          </div>
+                          <div className="p-5">
+                          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                            <div className="min-w-0">
+                              <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#006b58]">
+                                {session.courseTitle}
+                              </div>
+                              <h3 className="mt-1 text-lg font-extrabold text-slate-950">{session.title}</h3>
+                              {session.subtitle ? (
+                                <p className="mt-1 text-sm font-semibold text-slate-500">{session.subtitle}</p>
+                              ) : null}
                             </div>
                             <span
                               className={[
-                                "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider",
-                                getDisplayStatus(liveClass) === "completed"
-                                  ? "bg-slate-100 text-slate-700 border border-slate-200"
-                                  : getDisplayStatus(liveClass) === "published"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                                    : getDisplayStatus(liveClass) === "cancelled"
-                                      ? "bg-red-50 text-red-700 border border-red-100"
-                                      : "bg-amber-50 text-amber-700 border border-amber-100",
+                                "inline-flex shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider",
+                                getStatusClass(status),
                               ].join(" ")}
                             >
-                              {getDisplayStatus(liveClass)}
+                              {status}
                             </span>
                           </div>
-                          <p className="mt-2 text-sm text-slate-500 line-clamp-2">
-                            {liveClass.description}
-                          </p>
-                          <div className="mt-4 space-y-2 text-xs font-semibold text-slate-500">
+
+                          <p className="mt-3 text-sm leading-relaxed text-slate-500">{session.description}</p>
+
+                          <div className="mt-4 grid grid-cols-1 gap-2 text-xs font-semibold text-slate-500 sm:grid-cols-2">
                             <span className="flex items-center gap-2">
                               <FiClock />
-                              {formatClassTimeRange(liveClass)} IST
+                              {formatDailyWindow(session)}
                             </span>
                             <span className="flex items-center gap-2">
                               <FiCalendar />
-                              {liveClass.durationMinutes} minutes
+                              {session.recurrenceType === "daily" ? "Repeats daily" : session.recurrenceType}
                             </span>
                           </div>
-                          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+
+                          {session.isTodayCancelled ? (
+                            <div className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                              Today's class is cancelled
+                              {session.todayCancellationReason ? `: ${session.todayCancellationReason}` : "."}
+                            </div>
+                          ) : null}
+                          {session.todayStatus === "completed_today" ? (
+                            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                              Today's session is completed. This recurring session remains active for tomorrow.
+                            </div>
+                          ) : null}
+
+                          <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-7">
                             <button
                               type="button"
-                              disabled={trainerActionsLocked}
-                              onClick={() => startEditingSession(liveClass)}
-                              className="h-9 rounded-lg bg-slate-50 text-slate-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Edit live class"
+                              disabled={lockedSession || actionId === `edit:${session.id}`}
+                              onClick={() => startEditingSession(session)}
+                              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-slate-50 text-xs font-extrabold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <FiEdit3 />
                               Edit
                             </button>
+                            {session.isPaused ? (
+                              <button
+                                type="button"
+                                disabled={lockedSession || actionId === `resume:${session.id}`}
+                                onClick={() => updateSessionAction(session.id, "resume")}
+                                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 text-xs font-extrabold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <FiPlayCircle />
+                                Resume
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={lockedSession || actionId === `pause:${session.id}`}
+                                onClick={() => updateSessionAction(session.id, "pause")}
+                                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-amber-50 text-xs font-extrabold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <FiPauseCircle />
+                                Pause
+                              </button>
+                            )}
+                            {session.isTodayCancelled ? (
+                              <button
+                                type="button"
+                                disabled={lockedSession || actionId === `restoreToday:${session.id}`}
+                                onClick={() => updateSessionAction(session.id, "restoreToday")}
+                                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 text-xs font-extrabold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <FiRotateCcw />
+                                Restore
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={lockedSession || actionId === `cancelToday:${session.id}`}
+                                onClick={() => openSessionDialog(session.id, "cancelToday")}
+                                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-red-50 text-xs font-extrabold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <FiXCircle />
+                                Cancel today
+                              </button>
+                            )}
+                            <a
+                              href={session.meetingLink || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-50 px-2 text-xs font-extrabold text-slate-700 hover:bg-slate-100"
+                            >
+                              Meet link
+                            </a>
                             <button
                               type="button"
-                              disabled={trainerActionsLocked || actionId === `publish:${liveClass.id}` || liveClass.status === "published"}
-                              onClick={() => updateSessionStatus(liveClass.id, "publish")}
-                              className="h-9 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Publish live class"
+                              disabled={lockedSession || actionId === `end:${session.id}`}
+                              onClick={() => openSessionDialog(session.id, "end")}
+                              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-red-600 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              <FiSend />
-                              Publish
+                              <FiStopCircle />
+                              End
                             </button>
                             <button
                               type="button"
-                              disabled={trainerActionsLocked || actionId === `cancel:${liveClass.id}` || liveClass.status === "cancelled"}
-                              onClick={() => openSessionDialog(liveClass.id, "cancel")}
-                              className="h-9 rounded-lg bg-amber-50 text-amber-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Cancel live class"
-                            >
-                              <FiXCircle />
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              disabled={trainerActionsLocked || actionId === `delete:${liveClass.id}`}
-                              onClick={() => openSessionDialog(liveClass.id, "delete")}
-                              className="h-9 rounded-lg bg-red-50 text-red-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Delete live class"
+                              disabled={trainerActionsLocked || actionId === `delete:${session.id}`}
+                              onClick={() => openSessionDialog(session.id, "delete")}
+                              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-red-50 text-xs font-extrabold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <FiTrash2 />
                               Delete
                             </button>
                           </div>
-                        </div>
-                      </article>
-                    ))
+                          </div>
+                        </article>
+                      );
+                    })
                   )}
                 </div>
               </section>
