@@ -1,43 +1,118 @@
-# LurnStack (Frontend)
+# LurnStack Trainer App
 
-React (Create React App) + TailwindCSS single-page app with feature-based modules (auth, cart, live-classes, courses, etc.). Deployed as an SPA on the VPS/aapanel frontend domain (`lurnstack.com`).
+React + TailwindCSS single-page app for the trainer portal.
 
-## Service domains
+Live trainer site:
 
-- Frontend: `https://lurnstack.com`
-- Admin: `https://admin.lurnstack.com`
-- Backend API: `https://api.lurnstack.com`
+```text
+https://trainers.lurnstack.com
+```
 
-## VPS/aapanel routing
+Backend API:
 
-This React app uses browser routes. On a VPS, the web server must fallback
-unknown frontend routes to `index.html`, otherwise refreshing `/courses`,
-`/login`, `/signup`, `/dashboard`, or another React route will show a server
-404. Apache builds include `public/.htaccess`. Nginx/aaPanel must use the
-`try_files` rule in `docs/aapanel-spa-routing.md`; the same snippet is copied
-into the build as `nginx-spa-fallback.conf`.
+```text
+https://api.lurnstack.com
+```
 
-## Quick start
+## What This App Includes
 
-1) Create `.env.local` (or copy from `.env.example`):
+- Trainer signup
+- Trainer login
+- Protected trainer dashboard
+- Trainer live class create/edit flow
+- Trainer live class publish/cancel/delete actions
+- Trainer account active/inactive status check
 
-`REACT_APP_API_BASE_URL=https://api.lurnstack.com`
+Student shopping, student learning, cart, and public course pages are not routed in this trainer build.
 
-2) Run:
+## Project Structure
 
-- `npm start`
+```text
+src/
+  app/
+    providers/        App-level providers
+    router/           Browser routes and path constants
+  auth/
+    api/              Login/register API calls
+    components/       Auth route guards
+    lib/              Auth validation helpers
+    model/            Auth context and token storage
+    pages/            Login and signup pages
+  trainers/
+    api/              Trainer session API calls
+    pages/            Trainer dashboard
+  shared/
+    api/              Shared Axios client and error helpers
+    components/       Shared UI helpers
+    config/           Environment config
+```
 
-## VPS/aapanel build
+## Main Flow
 
-Build the frontend with:
+1. `src/index.js` renders `src/App.js`.
+2. `App.js` wraps the app with `AppProviders` and `BrowserRouter`.
+3. `AppProviders` loads `AuthProvider`.
+4. `AppRouter` defines the trainer-only routes.
+5. `/trainer-dashboard` is protected by `RequireAuth role="trainer"`.
+6. Login/signup store the token and user in web storage.
+7. The shared Axios client attaches the token to API requests.
+8. The trainer dashboard loads trainer status and trainer sessions from the backend.
 
-- `npm run build`
+## Routes
 
-Upload or point the `lurnstack.com` document root to the generated `build`
-folder. Make sure the SPA fallback rule is enabled, otherwise refresh on
-frontend routes will show 404.
+```text
+/                   -> redirects to /trainer-dashboard
+/login              -> trainer login
+/signup             -> trainer signup
+/trainer-dashboard  -> protected trainer dashboard
+*                   -> redirects to /trainer-dashboard
+```
 
-For Nginx/aaPanel, the required frontend rule is:
+## Environment
+
+Create `.env.local` for local development:
+
+```env
+REACT_APP_API_BASE_URL=https://api.lurnstack.com
+```
+
+If this value is not set:
+
+- localhost defaults to an empty base URL, which can use the CRA dev proxy
+- deployed builds default to `https://api.lurnstack.com`
+
+The local CRA proxy is configured in `package.json`:
+
+```json
+"proxy": "https://api.lurnstack.com"
+```
+
+Important: the CRA proxy only works during `npm start`. It does not exist in the production build.
+
+## Local Development
+
+```bash
+npm install
+npm start
+```
+
+## Production Build
+
+```bash
+npm run build
+```
+
+Upload the generated `build` folder to the aaPanel site for:
+
+```text
+https://trainers.lurnstack.com
+```
+
+## aaPanel/Nginx SPA Routing
+
+Because this is a React browser-router SPA, the frontend server must fallback unknown routes to `index.html`.
+
+Use this Nginx rule on the trainer frontend site:
 
 ```nginx
 location / {
@@ -45,25 +120,52 @@ location / {
 }
 ```
 
-Keep `api.lurnstack.com` separate from the frontend site.
+Keep `api.lurnstack.com` separate from `trainers.lurnstack.com`.
 
-## Architecture (high level)
+## Backend CORS Requirement
 
-- App entry: `src/index.js` → `src/App.js`
-- Global providers: `src/app/providers/AppProviders.jsx` (Redux + AuthContext + CartContext)
-- Routing: `src/app/router/router.jsx` + `src/app/router/paths.js`
-- Shared layout shell: `src/app/AppShell.jsx` (navbar/footer + integrations + `Outlet`)
+The live trainer app calls the API from this origin:
 
-## Auth flow (VPS backend)
+```text
+https://trainers.lurnstack.com
+```
 
-- API base URL comes from `REACT_APP_API_BASE_URL` (`src/shared/config/env.js`)
-- Login: `POST /api/auth/login` (`src/auth/api/authApi.js`)
-- Register: `POST /api/auth/register` (`src/auth/api/authApi.js`)
-- Token + user persistence:
-  - “Remember me” checked → `localStorage`
-  - unchecked → `sessionStorage`
-  (`src/auth/model/authStorage.js`)
+The backend must allow that origin in CORS. Otherwise login/register will fail in the browser even if the API works locally.
 
-## Notes on security
+Full backend handoff and troubleshooting doc:
 
-This frontend stores the auth token in Web Storage (session/local). For strongest protection against XSS token theft, prefer **httpOnly secure cookies** on the backend (requires backend changes).
+```text
+docs/TRAINER_APP_FLOW_AND_CORS.md
+```
+
+Full trainer portal workflow document:
+
+```text
+docs/TRAINER_APP_WORKFLOW.md
+```
+
+## Key API Endpoints
+
+Auth:
+
+```text
+POST /api/auth/login
+POST /api/auth/register
+```
+
+Trainer sessions:
+
+```text
+GET    /api/trainer/status
+GET    /api/trainer/sessions
+POST   /api/trainer/sessions
+PATCH  /api/trainer/sessions/:id
+PATCH  /api/trainer/sessions/:id/publish
+PATCH  /api/trainer/sessions/:id/cancel
+DELETE /api/trainer/sessions/:id
+```
+
+## Security Note
+
+This frontend stores the auth token in `localStorage` or `sessionStorage`.
+For stronger protection against XSS token theft, the backend can later move auth to secure `httpOnly` cookies.

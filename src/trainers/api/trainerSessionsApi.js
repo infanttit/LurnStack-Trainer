@@ -2,97 +2,122 @@ import { axiosClient } from "../../shared/api/axiosClient";
 import { getAxiosErrorMessage, getAxiosErrorStatus } from "../../shared/api/axiosError";
 import { env } from "../../shared/config/env";
 
+const FALLBACK_TRAINER_COURSES = [
+  {
+    id: "frontend-react-development",
+    title: "React Frontend Development",
+    subtitle: "Components, hooks, state management, and frontend projects",
+    category: "Frontend Development",
+  },
+  {
+    id: "frontend-nextjs-development",
+    title: "Next.js Production Development",
+    subtitle: "Routing, server rendering, API routes, auth, and deployment",
+    category: "Frontend Development",
+  },
+  {
+    id: "html-css-responsive-design",
+    title: "HTML CSS Responsive Web Design",
+    subtitle: "Layouts, responsive UI, forms, animations, and landing pages",
+    category: "Web Development",
+  },
+  {
+    id: "full-stack-web-development",
+    title: "Full Stack Web Development",
+    subtitle: "Frontend, backend, APIs, database, and deployment",
+    category: "Full Stack Development",
+  },
+  {
+    id: "mern-stack-development",
+    title: "MERN Stack Development",
+    subtitle: "MongoDB, Express, React, Node.js, JWT auth, and projects",
+    category: "Full Stack Development",
+  },
+  {
+    id: "javascript-development",
+    title: "Modern JavaScript Development",
+    subtitle: "ES6, async programming, DOM, APIs, and projects",
+    category: "Web Development",
+  },
+  {
+    id: "node-api-development",
+    title: "Node.js Backend API Development",
+    subtitle: "Express APIs, authentication, validation, and database integration",
+    category: "Backend Development",
+  },
+  {
+    id: "spring-boot-api-development",
+    title: "Spring Boot API Development",
+    subtitle: "REST APIs, security, services, repositories, and database access",
+    category: "Backend Development",
+  },
+  {
+    id: "python-programming",
+    title: "Python Programming",
+    subtitle: "Core Python, problem solving, automation, and practical tasks",
+    category: "Programming",
+  },
+  {
+    id: "java-programming",
+    title: "Java Programming",
+    subtitle: "OOP, collections, exception handling, and application development",
+    category: "Programming",
+  },
+  {
+    id: "flutter-mobile-development",
+    title: "Flutter Mobile App Development",
+    subtitle: "Widgets, navigation, API integration, Firebase, and app release",
+    category: "Mobile App Development",
+  },
+  {
+    id: "react-native-development",
+    title: "React Native App Development",
+    subtitle: "Mobile UI, navigation, native APIs, and cross-platform apps",
+    category: "Mobile App Development",
+  },
+  {
+    id: "sql-database-development",
+    title: "SQL Database Development",
+    subtitle: "Queries, joins, schema design, and database practice",
+    category: "Database",
+  },
+  {
+    id: "mongodb-nosql-development",
+    title: "MongoDB NoSQL Development",
+    subtitle: "Collections, schemas, aggregation, indexing, and app integration",
+    category: "Database",
+  },
+  {
+    id: "devops-cloud-deployment",
+    title: "DevOps and Cloud Deployment",
+    subtitle: "Git, CI/CD, VPS deployment, Nginx, and cloud basics",
+    category: "DevOps",
+  },
+  {
+    id: "aws-cloud-development",
+    title: "AWS Cloud Development",
+    subtitle: "Cloud basics, hosting, storage, deployment, and production setup",
+    category: "Cloud Computing",
+  },
+  {
+    id: "ui-ux-product-design",
+    title: "UI UX Product Design",
+    subtitle: "Wireframes, user flows, design systems, and Figma practice",
+    category: "UI/UX Design",
+  },
+];
+
 function getTrainerSessionError(err, fallback, { preferBackendForbiddenMessage = false } = {}) {
   const status = getAxiosErrorStatus(err);
   if (status === 401) return "Please log in as a trainer to continue.";
   if (status === 403) {
     return preferBackendForbiddenMessage
-      ? getAxiosErrorMessage(err, "Action restricted. Inactive trainers cannot create classes.")
+      ? getAxiosErrorMessage(err, "Action restricted. Inactive trainers cannot manage sessions.")
       : "Action restricted. Your trainer account is inactive.";
   }
-  if (status === 404) return "The live class could not be found.";
+  if (status === 404) return "The recurring live session could not be found.";
   if (status >= 500) return "Trainer session service is unavailable. Please try again later.";
   return getAxiosErrorMessage(err, fallback);
-}
-
-function toAbsoluteAssetUrl(path) {
-  const value = String(path || "").trim();
-  if (!value) return "";
-  if (/^(https?:|data:|blob:)/i.test(value)) return value;
-  const baseUrl = String(env.apiBaseUrl || "").replace(/\/+$/, "");
-  return `${baseUrl}/${value.replace(/^\/+/, "")}`;
-}
-
-function normalizeSession(dto) {
-  const raw = dto || {};
-  const cancellationReason =
-    raw.cancellationReason ||
-    raw.cancelReason ||
-    raw.cancelledReason ||
-    raw.cancelled_reason ||
-    raw.reason ||
-    "";
-  const scheduledAt = toKolkataIso(raw.scheduledDate, raw.startTime) || raw.scheduledAt || "";
-  const endsAt = toKolkataIso(raw.scheduledDate, raw.endTime) || raw.endsAt || "";
-  const durationMinutes =
-    getDurationMinutes(raw.startTime, raw.endTime) ||
-    getDurationMinutesFromIso(scheduledAt, endsAt) ||
-    Number(raw.durationMinutes) ||
-    60;
-
-  return {
-    id: raw.id,
-    courseId: raw.id,
-    courseName: raw.courseTitle || "",
-    courseTitle: raw.courseTitle || "",
-    tab: raw.category || "Trainer Courses",
-    category: raw.category || "Trainer Courses",
-    title: raw.classTitle || "",
-    classTitle: raw.classTitle || "",
-    instructorName: raw.trainerName || "Trainer",
-    description: raw.description || "",
-    scheduledDate: raw.scheduledDate || "",
-    startTime: raw.startTime || "",
-    endTime: raw.endTime || "",
-    scheduledAt,
-    endsAt,
-    durationMinutes,
-    meetUrl: raw.meetingLink || "",
-    meetingLink: raw.meetingLink || "",
-    thumbnail: toAbsoluteAssetUrl(raw.thumbnail),
-    trainerId: raw.trainerId || "",
-    trainerName: raw.trainerName || "",
-    trainerEmail: raw.trainerEmail || "",
-    status: raw.status || "draft",
-    cancellationReason,
-    createdAt: raw.createdAt || "",
-    updatedAt: raw.updatedAt || "",
-    raw,
-  };
-}
-
-function getDurationMinutes(startTime, endTime) {
-  const [startHour, startMinute] = String(startTime || "").split(":").map(Number);
-  const [endHour, endMinute] = String(endTime || "").split(":").map(Number);
-  if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return 0;
-  const startTotal = startHour * 60 + startMinute;
-  const endTotal = endHour * 60 + endMinute;
-  return endTotal > startTotal ? endTotal - startTotal : 0;
-}
-
-function toKolkataIso(date, time) {
-  const d = String(date || "").trim();
-  const t = String(time || "").trim();
-  if (d.includes("T")) return d;
-  if (!d || !/^\d{2}:\d{2}$/.test(t)) return "";
-  return `${d}T${t}:00+05:30`;
-}
-
-function getDurationMinutesFromIso(startIso, endIso) {
-  const startMs = new Date(startIso || "").getTime();
-  const endMs = new Date(endIso || "").getTime();
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return 0;
-  return Math.round((endMs - startMs) / 60000);
 }
 
 function unwrap(res) {
@@ -118,14 +143,149 @@ function normalizeActiveStatus(payload) {
   return ["true", "1", "active", "activated", "enabled", "approved"].includes(value);
 }
 
+function normalizeCourse(dto) {
+  const raw = dto || {};
+  return {
+    id: String(raw.id || raw._id || raw.courseId || ""),
+    title: raw.title || raw.courseTitle || raw.name || raw.courseName || "Untitled course",
+    subtitle: raw.subtitle || raw.shortDescription || "",
+    category: raw.category || raw.tab || "",
+    raw,
+  };
+}
+
+function toAbsoluteAssetUrl(path) {
+  const value = String(path || "").trim();
+  if (!value) return "";
+  if (/^(https?:|data:|blob:)/i.test(value)) return value;
+  const baseUrl = String(env.apiBaseUrl || "").replace(/\/+$/, "");
+  return `${baseUrl}/${value.replace(/^\/+/, "")}`;
+}
+
+function normalizeSession(dto) {
+  const raw = dto || {};
+  const status = String(raw.status || (raw.isPaused ? "paused" : "active") || "active").toLowerCase();
+  const todayStatus = String(
+    raw.todayStatus ||
+      raw.todaysStatus ||
+      raw.currentDayStatus ||
+      raw.dailyStatus ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+  const todayCancellation =
+    raw.todayCancellation ||
+    raw.todayCancel ||
+    raw.cancelledToday ||
+    raw.todaysCancellation ||
+    null;
+
+  return {
+    id: String(raw.id || raw._id || raw.sessionId || ""),
+    courseId: String(raw.courseId || raw.course?._id || raw.course?.id || ""),
+    courseTitle:
+      raw.courseTitle ||
+      raw.courseName ||
+      raw.course?.title ||
+      raw.course?.courseTitle ||
+      raw.course?.name ||
+      "Assigned course",
+    title: raw.title || raw.classTitle || "Recurring live session",
+    subtitle: raw.subtitle || "",
+    description: raw.description || "",
+    startTime: raw.startTime || "",
+    endTime: raw.endTime || "",
+    timezone: raw.timezone || "Asia/Kolkata",
+    meetingLink: raw.meetingLink || raw.meetUrl || "",
+    thumbnail: toAbsoluteAssetUrl(raw.thumbnail || raw.thumbnailUrl || raw.image || ""),
+    isRecurring: raw.isRecurring !== false,
+    recurrenceType: raw.recurrenceType || "daily",
+    status,
+    isPaused: Boolean(raw.isPaused) || status === "paused",
+    isEnded: Boolean(raw.isEnded) || status === "ended",
+    todayStatus,
+    isTodayCancelled: Boolean(
+      todayStatus === "cancelled_today" ||
+        todayStatus === "today_cancelled" ||
+      raw.isTodayCancelled ||
+        raw.cancelledToday ||
+        raw.todayCancelled ||
+        todayCancellation?.isCancelled
+    ),
+    todayCancellationReason:
+      raw.todayCancellationReason ||
+      raw.cancellationReason ||
+      todayCancellation?.reason ||
+      "",
+    trainerId: raw.trainerId || "",
+    trainerName: raw.trainerName || "",
+    trainerEmail: raw.trainerEmail || "",
+    createdAt: raw.createdAt || "",
+    updatedAt: raw.updatedAt || "",
+    raw,
+  };
+}
+
+function normalizeSessionPayload(payload) {
+  const data = {
+    courseId: String(payload.courseId || "").trim(),
+    title: String(payload.title || "").trim(),
+    subtitle: String(payload.subtitle || "").trim(),
+    description: String(payload.description || "").trim(),
+    startTime: payload.startTime,
+    endTime: payload.endTime,
+    timezone: payload.timezone || "Asia/Kolkata",
+    meetingLink: String(payload.meetingLink || "").trim(),
+    isRecurring: payload.isRecurring !== false,
+    recurrenceType: payload.recurrenceType || "daily",
+  };
+
+  if (!payload.thumbnailFile) return data;
+
+  const formData = new FormData();
+  Object.entries(data).forEach(([key, value]) => {
+    formData.append(key, value);
+  });
+  formData.append("thumbnail", payload.thumbnailFile);
+  return formData;
+}
+
+export async function getTrainerCourses() {
+  try {
+    const res = await axiosClient.get("/api/trainer/courses");
+    const payload = unwrap(res);
+    const courses = Array.isArray(payload.data) ? payload.data : [];
+    const normalizedCourses = courses.map(normalizeCourse).filter((course) => course.id);
+    return normalizedCourses.length
+      ? normalizedCourses
+      : FALLBACK_TRAINER_COURSES.map(normalizeCourse);
+  } catch (err) {
+    if (getAxiosErrorStatus(err) === 404) {
+      return FALLBACK_TRAINER_COURSES.map(normalizeCourse);
+    }
+    throw new Error(getTrainerSessionError(err, "Unable to load trainer courses."));
+  }
+}
+
 export async function getTrainerSessions() {
   try {
     const res = await axiosClient.get("/api/trainer/sessions");
     const payload = unwrap(res);
     const sessions = Array.isArray(payload.data) ? payload.data : [];
-    return sessions.map(normalizeSession);
+    return sessions.map(normalizeSession).filter((session) => session.id);
   } catch (err) {
-    throw new Error(getTrainerSessionError(err, "Unable to load trainer live classes."));
+    throw new Error(getTrainerSessionError(err, "Unable to load recurring live sessions."));
+  }
+}
+
+export async function getTrainerSession(sessionId) {
+  try {
+    const res = await axiosClient.get(`/api/trainer/sessions/${encodeURIComponent(sessionId)}`);
+    const payload = unwrap(res);
+    return normalizeSession(payload.data);
+  } catch (err) {
+    throw new Error(getTrainerSessionError(err, "Unable to load session details."));
   }
 }
 
@@ -139,100 +299,69 @@ export async function getTrainerStatus() {
   }
 }
 
-export async function createTrainerSession({
-  courseTitle,
-  category,
-  description,
-  classTitle,
-  scheduledDate,
-  startTime,
-  endTime,
-  meetingLink,
-  thumbnailFile,
-}) {
+export async function createTrainerSession(payload) {
   try {
-    const formData = new FormData();
-    formData.append("courseTitle", courseTitle);
-    formData.append("category", category);
-    formData.append("description", description);
-    formData.append("classTitle", classTitle);
-    formData.append("scheduledDate", scheduledDate);
-    formData.append("startTime", startTime);
-    formData.append("endTime", endTime);
-    formData.append("meetingLink", meetingLink);
-    if (thumbnailFile) formData.append("thumbnail", thumbnailFile);
-
-    const res = await axiosClient.post("/api/trainer/sessions", formData);
-    const payload = unwrap(res);
-    return normalizeSession(payload.data);
+    const res = await axiosClient.post(
+      "/api/trainer/sessions",
+      normalizeSessionPayload(payload)
+    );
+    const responsePayload = unwrap(res);
+    return normalizeSession(responsePayload.data);
   } catch (err) {
     throw new Error(
-      getTrainerSessionError(err, "Unable to create live class.", {
+      getTrainerSessionError(err, "Unable to create recurring live session.", {
         preferBackendForbiddenMessage: true,
       })
     );
   }
 }
 
-export async function updateTrainerSession(
-  sessionId,
-  {
-    courseTitle,
-    category,
-    description,
-    classTitle,
-    scheduledDate,
-    startTime,
-    endTime,
-    meetingLink,
-    thumbnailFile,
-  }
-) {
+export async function updateTrainerSession(sessionId, payload) {
   try {
-    const formData = new FormData();
-    formData.append("courseTitle", courseTitle);
-    formData.append("category", category);
-    formData.append("description", description);
-    formData.append("classTitle", classTitle);
-    formData.append("scheduledDate", scheduledDate);
-    formData.append("startTime", startTime);
-    formData.append("endTime", endTime);
-    formData.append("meetingLink", meetingLink);
-    if (thumbnailFile) formData.append("thumbnail", thumbnailFile);
-
     const res = await axiosClient.patch(
       `/api/trainer/sessions/${encodeURIComponent(sessionId)}`,
-      formData
+      normalizeSessionPayload(payload)
     );
     const responsePayload = unwrap(res);
     return normalizeSession(responsePayload.data);
   } catch (err) {
-    throw new Error(getTrainerSessionError(err, "Unable to update live class."));
+    throw new Error(getTrainerSessionError(err, "Unable to update recurring live session."));
   }
 }
 
-export async function publishTrainerSession(sessionId) {
+export async function pauseTrainerSession(sessionId) {
   try {
-    const res = await axiosClient.patch(
-      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/publish`
+    const res = await axiosClient.post(
+      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/pause`
     );
     const payload = unwrap(res);
     return normalizeSession(payload.data);
   } catch (err) {
-    throw new Error(getTrainerSessionError(err, "Unable to publish live class."));
+    throw new Error(getTrainerSessionError(err, "Unable to pause recurring live session."));
   }
 }
 
-export async function cancelTrainerSession(sessionId, reason) {
+export async function resumeTrainerSession(sessionId) {
   try {
-    const res = await axiosClient.patch(
-      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/cancel`,
-      { reason }
+    const res = await axiosClient.post(
+      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/resume`
     );
     const payload = unwrap(res);
     return normalizeSession(payload.data);
   } catch (err) {
-    throw new Error(getTrainerSessionError(err, "Unable to cancel live class."));
+    throw new Error(getTrainerSessionError(err, "Unable to resume recurring live session."));
+  }
+}
+
+export async function endTrainerSession(sessionId) {
+  try {
+    const res = await axiosClient.post(
+      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/end`
+    );
+    const payload = unwrap(res);
+    return normalizeSession(payload.data);
+  } catch (err) {
+    throw new Error(getTrainerSessionError(err, "Unable to end recurring live session."));
   }
 }
 
@@ -244,6 +373,31 @@ export async function deleteTrainerSession(sessionId) {
     unwrap(res);
     return true;
   } catch (err) {
-    throw new Error(getTrainerSessionError(err, "Unable to delete live class."));
+    throw new Error(getTrainerSessionError(err, "Unable to delete recurring live session."));
+  }
+}
+
+export async function cancelTodayTrainerSession(sessionId, reason) {
+  try {
+    const res = await axiosClient.post(
+      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/cancel-today`,
+      { reason }
+    );
+    const payload = unwrap(res);
+    return normalizeSession(payload.data);
+  } catch (err) {
+    throw new Error(getTrainerSessionError(err, "Unable to cancel today's class."));
+  }
+}
+
+export async function restoreTodayTrainerSession(sessionId) {
+  try {
+    const res = await axiosClient.delete(
+      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/cancel-today`
+    );
+    const payload = unwrap(res);
+    return payload.data ? normalizeSession(payload.data) : true;
+  } catch (err) {
+    throw new Error(getTrainerSessionError(err, "Unable to restore today's class."));
   }
 }
