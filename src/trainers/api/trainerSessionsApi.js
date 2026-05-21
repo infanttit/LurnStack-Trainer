@@ -1,10 +1,15 @@
-  import { axiosClient } from "../../shared/api/axiosClient";
+import { axiosClient } from "../../shared/api/axiosClient";
 import { getAxiosErrorMessage, getAxiosErrorStatus } from "../../shared/api/axiosError";
 import { env } from "../../shared/config/env";
 
-function getTrainerSessionError(err, fallback) {
+function getTrainerSessionError(err, fallback, { preferBackendForbiddenMessage = false } = {}) {
   const status = getAxiosErrorStatus(err);
-  if (status === 401 || status === 403) return "Please log in as a trainer to continue.";
+  if (status === 401) return "Please log in as a trainer to continue.";
+  if (status === 403) {
+    return preferBackendForbiddenMessage
+      ? getAxiosErrorMessage(err, "Action restricted. Inactive trainers cannot create classes.")
+      : "Action restricted. Your trainer account is inactive.";
+  }
   if (status === 404) return "The live class could not be found.";
   if (status >= 500) return "Trainer session service is unavailable. Please try again later.";
   return getAxiosErrorMessage(err, fallback);
@@ -27,9 +32,12 @@ function normalizeSession(dto) {
     raw.cancelled_reason ||
     raw.reason ||
     "";
+  const scheduledAt = toKolkataIso(raw.scheduledDate, raw.startTime) || raw.scheduledAt || "";
+  const endsAt = toKolkataIso(raw.scheduledDate, raw.endTime) || raw.endsAt || "";
   const durationMinutes =
-    Number(raw.durationMinutes) ||
     getDurationMinutes(raw.startTime, raw.endTime) ||
+    getDurationMinutesFromIso(scheduledAt, endsAt) ||
+    Number(raw.durationMinutes) ||
     60;
 
   return {
@@ -46,8 +54,8 @@ function normalizeSession(dto) {
     scheduledDate: raw.scheduledDate || "",
     startTime: raw.startTime || "",
     endTime: raw.endTime || "",
-    scheduledAt: raw.scheduledAt || "",
-    endsAt: raw.endsAt || "",
+    scheduledAt,
+    endsAt,
     durationMinutes,
     meetUrl: raw.meetingLink || "",
     meetingLink: raw.meetingLink || "",
@@ -68,15 +76,46 @@ function getDurationMinutes(startTime, endTime) {
   const [endHour, endMinute] = String(endTime || "").split(":").map(Number);
   if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return 0;
   const startTotal = startHour * 60 + startMinute;
-  let endTotal = endHour * 60 + endMinute;
-  if (endTotal <= startTotal) endTotal += 24 * 60;
-  return endTotal - startTotal;
+  const endTotal = endHour * 60 + endMinute;
+  return endTotal > startTotal ? endTotal - startTotal : 0;
+}
+
+function toKolkataIso(date, time) {
+  const d = String(date || "").trim();
+  const t = String(time || "").trim();
+  if (d.includes("T")) return d;
+  if (!d || !/^\d{2}:\d{2}$/.test(t)) return "";
+  return `${d}T${t}:00+05:30`;
+}
+
+function getDurationMinutesFromIso(startIso, endIso) {
+  const startMs = new Date(startIso || "").getTime();
+  const endMs = new Date(endIso || "").getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return 0;
+  return Math.round((endMs - startMs) / 60000);
 }
 
 function unwrap(res) {
   const data = res?.data;
   if (!data?.success) throw new Error(data?.message || "Request failed");
   return data;
+}
+
+function normalizeActiveStatus(payload) {
+  const source = payload?.data || payload?.trainer || payload?.user || payload || {};
+  const raw =
+    source.isActive ??
+    source.status ??
+    source.active ??
+    source.IS_ACTIVE ??
+    source.STATUS ??
+    false;
+
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw === 1;
+
+  const value = String(raw || "").trim().toLowerCase();
+  return ["true", "1", "active", "activated", "enabled", "approved"].includes(value);
 }
 
 export async function getTrainerSessions() {
@@ -87,6 +126,16 @@ export async function getTrainerSessions() {
     return sessions.map(normalizeSession);
   } catch (err) {
     throw new Error(getTrainerSessionError(err, "Unable to load trainer live classes."));
+  }
+}
+
+export async function getTrainerStatus() {
+  try {
+    const res = await axiosClient.get("/api/trainer/status");
+    const payload = unwrap(res);
+    return { isActive: normalizeActiveStatus(payload) };
+  } catch (err) {
+    throw new Error(getAxiosErrorMessage(err, "Unable to verify trainer account status."));
   }
 }
 
@@ -117,7 +166,11 @@ export async function createTrainerSession({
     const payload = unwrap(res);
     return normalizeSession(payload.data);
   } catch (err) {
-    throw new Error(getTrainerSessionError(err, "Unable to create live class."));
+    throw new Error(
+      getTrainerSessionError(err, "Unable to create live class.", {
+        preferBackendForbiddenMessage: true,
+      })
+    );
   }
 }
 

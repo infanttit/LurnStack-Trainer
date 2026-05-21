@@ -31,9 +31,13 @@ import {
   createTrainerSession,
   deleteTrainerSession,
   getTrainerSessions,
+  getTrainerStatus,
   publishTrainerSession,
   updateTrainerSession,
 } from "../api/trainerSessionsApi";
+
+const INACTIVE_TRAINER_MESSAGE =
+  "Your trainer account is inactive. You cannot create new classes.";
 
 const initialForm = {
   courseTitle: "",
@@ -218,9 +222,8 @@ function getDurationMinutes(startTime, endTime) {
   if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return 0;
 
   const startTotal = startHour * 60 + startMinute;
-  let endTotal = endHour * 60 + endMinute;
-  if (endTotal <= startTotal) endTotal += 24 * 60;
-  return endTotal - startTotal;
+  const endTotal = endHour * 60 + endMinute;
+  return endTotal > startTotal ? endTotal - startTotal : 0;
 }
 
 function readImageFile(file) {
@@ -248,6 +251,9 @@ export default function TrainerDashboardPage() {
   const [actionId, setActionId] = useState("");
   const [editingSessionId, setEditingSessionId] = useState("");
   const [confirmDialog, setConfirmDialog] = useState(emptyConfirmDialog);
+  const [isTrainerActive, setIsTrainerActive] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusError, setStatusError] = useState("");
 
   const trainerClasses = useMemo(
     () => liveClasses.filter((liveClass) => !user?.email || liveClass.trainerEmail === user.email),
@@ -266,6 +272,7 @@ export default function TrainerDashboardPage() {
       .filter((liveClass) => new Date(liveClass.scheduledAt).getTime() >= now)
       .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))[0];
   }, [trainerClasses]);
+  const trainerActionsLocked = !isTrainerActive;
 
   const loadTrainerClasses = async ({ silent = false } = {}) => {
     if (!silent) setLoadingClasses(true);
@@ -284,6 +291,27 @@ export default function TrainerDashboardPage() {
     loadTrainerClasses();
   }, []);
 
+  const loadTrainerStatus = async ({ silent = false } = {}) => {
+    if (!silent) setStatusLoading(true);
+    try {
+      const status = await getTrainerStatus();
+      setIsTrainerActive(status.isActive);
+      setStatusError("");
+    } catch (err) {
+      setStatusError(err?.message || "Unable to verify trainer account status.");
+    } finally {
+      if (!silent) setStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTrainerStatus();
+    const intervalId = window.setInterval(() => {
+      loadTrainerStatus({ silent: true });
+    }, 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => {
@@ -298,6 +326,11 @@ export default function TrainerDashboardPage() {
   };
 
   const handleThumbnailChange = async (e) => {
+    if (trainerActionsLocked) {
+      setError(INACTIVE_TRAINER_MESSAGE);
+      toast.warn(INACTIVE_TRAINER_MESSAGE);
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -318,6 +351,11 @@ export default function TrainerDashboardPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (trainerActionsLocked) {
+      setError(INACTIVE_TRAINER_MESSAGE);
+      toast.warn(INACTIVE_TRAINER_MESSAGE);
+      return;
+    }
     const required = [
       "courseTitle",
       "category",
@@ -392,6 +430,11 @@ export default function TrainerDashboardPage() {
   };
 
   const startEditingSession = (liveClass) => {
+    if (trainerActionsLocked) {
+      setError(INACTIVE_TRAINER_MESSAGE);
+      toast.warn(INACTIVE_TRAINER_MESSAGE);
+      return;
+    }
     setEditingSessionId(liveClass.id);
     setForm({
       courseTitle: liveClass.courseTitle || liveClass.courseName || "",
@@ -422,6 +465,11 @@ export default function TrainerDashboardPage() {
 
   const openSessionDialog = (sessionId, action) => {
     if (!sessionId) return;
+    if (trainerActionsLocked) {
+      setError(INACTIVE_TRAINER_MESSAGE);
+      toast.warn(INACTIVE_TRAINER_MESSAGE);
+      return;
+    }
     if (action === "cancel") {
       setConfirmDialog({
         open: true,
@@ -447,6 +495,11 @@ export default function TrainerDashboardPage() {
 
   const updateSessionStatus = async (sessionId, action, reason = "") => {
     if (!sessionId) return;
+    if (trainerActionsLocked) {
+      setError(INACTIVE_TRAINER_MESSAGE);
+      toast.warn(INACTIVE_TRAINER_MESSAGE);
+      return;
+    }
     setActionId(`${action}:${sessionId}`);
     setError("");
     setMessage("");
@@ -694,6 +747,23 @@ export default function TrainerDashboardPage() {
                   <p className="mt-1 text-xs sm:text-sm text-slate-500 leading-relaxed">
                     Create trainer-led classes and publish them directly to student Courses, Categories, and Live Classes.
                   </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span
+                      className={[
+                        "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider border",
+                        statusLoading
+                          ? "bg-slate-50 text-slate-600 border-slate-200"
+                          : isTrainerActive
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            : "bg-amber-50 text-amber-700 border-amber-100",
+                      ].join(" ")}
+                    >
+                      {statusLoading ? "Checking status" : isTrainerActive ? "Active trainer" : "Inactive trainer"}
+                    </span>
+                    {statusError ? (
+                      <span className="text-xs font-semibold text-red-600">{statusError}</span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
               <button
@@ -709,12 +779,20 @@ export default function TrainerDashboardPage() {
           </header>
 
           <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 lg:p-8">
+            {trainerActionsLocked ? (
+              <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 flex items-start gap-3">
+                <FiAlertCircle className="mt-0.5 flex-shrink-0" />
+                <span>{INACTIVE_TRAINER_MESSAGE}</span>
+              </div>
+            ) : null}
+
             {activeTab === "overview" ? (
               <div className="space-y-6">
-                <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   {[
                     ["Published classes", trainerClasses.length, FiVideo],
                     ["Live API status", loadingClasses ? "Syncing" : "Connected", FiUsers],
+                    ["Account status", statusLoading ? "Checking" : isTrainerActive ? "Active" : "Inactive", FiCheckCircle],
                     ["Next class", nextClass ? formatClassTime(nextClass.scheduledAt) : "Not scheduled", FiClock],
                   ].map(([label, value, Icon]) => (
                     <div key={label} className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
@@ -723,6 +801,39 @@ export default function TrainerDashboardPage() {
                       <div className="mt-1 text-sm font-semibold text-slate-500">{label}</div>
                     </div>
                   ))}
+                </section>
+
+                <section className="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-sm">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-[#00342b] text-white flex items-center justify-center text-2xl font-black">
+                        {(user?.fullName || "T").slice(0, 1).toUpperCase()}
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-extrabold text-slate-950">{user?.fullName || "Trainer"}</h2>
+                        <p className="mt-1 text-sm font-semibold text-slate-500 break-all">{user?.email || "No email available"}</p>
+                        {user?.phoneNumber ? (
+                          <p className="mt-1 text-sm font-semibold text-slate-500">{user.phoneNumber}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="text-xs font-black uppercase tracking-widest text-slate-500">Trainer access</div>
+                      <div
+                        className={[
+                          "mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider border",
+                          isTrainerActive
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            : "bg-amber-50 text-amber-700 border-amber-100",
+                        ].join(" ")}
+                      >
+                        {isTrainerActive ? "Creation enabled" : "Creation locked"}
+                      </div>
+                      <p className="mt-2 max-w-sm text-xs leading-relaxed text-slate-500">
+                        Admin activation controls whether this trainer can create or manage live sessions.
+                      </p>
+                    </div>
+                  </div>
                 </section>
 
                 <section className="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6">
@@ -736,7 +847,8 @@ export default function TrainerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => setActiveTab("create")}
-                      className="h-11 px-5 rounded-xl bg-[#00342b] text-white text-sm font-extrabold inline-flex items-center justify-center gap-2"
+                      disabled={trainerActionsLocked}
+                      className="h-11 px-5 rounded-xl bg-[#00342b] text-white text-sm font-extrabold inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <FiPlusCircle />
                       Create class
@@ -798,9 +910,18 @@ export default function TrainerDashboardPage() {
                       <span>{error}</span>
                     </div>
                   ) : null}
+                  {trainerActionsLocked ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 flex items-start gap-2">
+                      <FiAlertCircle className="mt-0.5 flex-shrink-0" />
+                      <span>{INACTIVE_TRAINER_MESSAGE}</span>
+                    </div>
+                  ) : null}
                 </div>
 
-                <div className="mt-6 grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-6 items-start">
+                <fieldset
+                  disabled={trainerActionsLocked || submitting}
+                  className="mt-6 grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-6 items-start disabled:opacity-60"
+                >
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 xl:sticky xl:top-0">
                     <div className="aspect-[16/10] rounded-xl overflow-hidden bg-white border border-slate-200">
                       {form.thumbnailPreview ? (
@@ -890,11 +1011,11 @@ export default function TrainerDashboardPage() {
                       {formErrors.meetUrl ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.meetUrl}</p> : null}
                     </label>
                   </div>
-                </div>
+                </fieldset>
 
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || trainerActionsLocked}
                   className="mt-6 w-full h-12 rounded-xl bg-[#00342b] text-white text-sm font-extrabold inline-flex items-center justify-center gap-2 hover:bg-[#004d40] transition-colors disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {submitting ? (
@@ -922,7 +1043,12 @@ export default function TrainerDashboardPage() {
                       These classes are visible on the student Courses, Categories, Course Details, and Live Classes pages.
                     </p>
                   </div>
-                  <button type="button" onClick={() => setActiveTab("create")} className="h-11 px-5 rounded-xl bg-[#00342b] text-white text-sm font-extrabold inline-flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("create")}
+                    disabled={trainerActionsLocked}
+                    className="h-11 px-5 rounded-xl bg-[#00342b] text-white text-sm font-extrabold inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
                     <FiPlusCircle />
                     New class
                   </button>
@@ -1013,8 +1139,9 @@ export default function TrainerDashboardPage() {
                           <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
                             <button
                               type="button"
+                              disabled={trainerActionsLocked}
                               onClick={() => startEditingSession(liveClass)}
-                              className="h-9 rounded-lg bg-slate-50 text-slate-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 hover:bg-slate-100"
+                              className="h-9 rounded-lg bg-slate-50 text-slate-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Edit live class"
                             >
                               <FiEdit3 />
@@ -1022,7 +1149,7 @@ export default function TrainerDashboardPage() {
                             </button>
                             <button
                               type="button"
-                              disabled={actionId === `publish:${liveClass.id}` || liveClass.status === "published"}
+                              disabled={trainerActionsLocked || actionId === `publish:${liveClass.id}` || liveClass.status === "published"}
                               onClick={() => updateSessionStatus(liveClass.id, "publish")}
                               className="h-9 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Publish live class"
@@ -1032,7 +1159,7 @@ export default function TrainerDashboardPage() {
                             </button>
                             <button
                               type="button"
-                              disabled={actionId === `cancel:${liveClass.id}` || liveClass.status === "cancelled"}
+                              disabled={trainerActionsLocked || actionId === `cancel:${liveClass.id}` || liveClass.status === "cancelled"}
                               onClick={() => openSessionDialog(liveClass.id, "cancel")}
                               className="h-9 rounded-lg bg-amber-50 text-amber-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Cancel live class"
@@ -1042,7 +1169,7 @@ export default function TrainerDashboardPage() {
                             </button>
                             <button
                               type="button"
-                              disabled={actionId === `delete:${liveClass.id}`}
+                              disabled={trainerActionsLocked || actionId === `delete:${liveClass.id}`}
                               onClick={() => openSessionDialog(liveClass.id, "delete")}
                               className="h-9 rounded-lg bg-red-50 text-red-700 text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Delete live class"
