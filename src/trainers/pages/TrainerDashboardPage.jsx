@@ -20,6 +20,7 @@ import {
   FiStopCircle,
   FiTrash2,
   FiUploadCloud,
+  FiUserCheck,
   FiX,
   FiXCircle,
 } from "react-icons/fi";
@@ -28,6 +29,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { PATHS } from "../../app/router/paths";
 import { useAuth } from "../../auth";
+import TrainerAttendancePage from "./TrainerAttendancePage";
 import {
   cancelTodayTrainerSession,
   createTrainerSession,
@@ -70,6 +72,7 @@ const tabs = [
   { id: "overview", label: "Overview", icon: FiBookOpen },
   { id: "create", label: "Create daily session", icon: FiPlusCircle },
   { id: "sessions", label: "Recurring sessions", icon: FiCalendar },
+  { id: "attendance", label: "Attendance", icon: FiUserCheck },
   { id: "earnings", label: "Earnings", icon: FiDollarSign },
 ];
 
@@ -1368,6 +1371,12 @@ export default function TrainerDashboardPage() {
                     })
                   )}
                 </div>
+              </section>
+            ) : null}
+
+            {activeTab === "attendance" ? (
+              <section>
+                <TrainerAttendancePage embedded />
               </section>
             ) : null}
 
