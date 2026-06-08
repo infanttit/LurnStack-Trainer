@@ -52,12 +52,17 @@ export async function registerApi({ fullName, email, phoneNumber, password, role
   }
 }
 
-export async function loginApi({ email, password }) {
+export async function loginApi({ email, password, role = "student" }) {
   try {
-    const res = await axiosClient.post("/api/auth/login", {
+    const apiRole = toApiRole(role);
+    const payload = {
       EMAIL_ADDRESS: email,
       PASSWORD: password,
-    });
+      ROLE: apiRole,
+      role: apiRole,
+      userRole: apiRole,
+    };
+    const res = await axiosClient.post("/api/auth/login", payload);
     const data = unwrap(res);
     return {
       user: data.user,
