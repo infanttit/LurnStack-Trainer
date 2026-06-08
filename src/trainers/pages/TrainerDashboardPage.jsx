@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiAlertCircle,
   FiBookOpen,
   FiCalendar,
+  FiChevronDown,
   FiCheckCircle,
   FiClock,
   FiCreditCard,
-  FiDollarSign,
   FiEdit3,
   FiImage,
   FiLogOut,
@@ -29,83 +29,39 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { PATHS } from "../../app/router/paths";
 import { useAuth } from "../../auth";
-import TrainerAttendancePage from "./TrainerAttendancePage";
+import {
+  categorySuggestions,
+  initialSessionForm,
+  sessionFieldLabels,
+  subtitleSuggestions,
+} from "../create-session/createSessionConfig";
+import TrainerAttendancePage from "../attendance/pages/TrainerAttendancePage";
+import TrainerPaymentsSection from "../payments/components/TrainerPaymentsSection";
+import { paymentViews } from "../payments/paymentConstants";
 import {
   cancelTodayTrainerSession,
   createTrainerSession,
   deleteTrainerSession,
   endTrainerSession,
-  getTrainerEarnings,
   getTrainerCourses,
-  getTrainerPayouts,
   getTrainerSession,
-  getTrainerSessionEarnings,
   getTrainerSessions,
   getTrainerStatus,
   pauseTrainerSession,
   restoreTodayTrainerSession,
   resumeTrainerSession,
   updateTrainerSession,
-} from "../api/trainerSessionsApi";
+} from "../recurring/api/trainerSessionsApi";
 
 const INACTIVE_TRAINER_MESSAGE =
   "Your trainer account is inactive. You cannot manage recurring live sessions.";
-
-const initialForm = {
-  courseId: "",
-  courseTitle: "",
-  category: "",
-  title: "",
-  subtitle: "",
-  description: "",
-  startTime: "",
-  endTime: "",
-  timezone: "Asia/Kolkata",
-  meetingLink: "",
-  thumbnailPreview: "",
-  thumbnailFile: null,
-  isRecurring: true,
-  recurrenceType: "daily",
-};
 
 const tabs = [
   { id: "overview", label: "Overview", icon: FiBookOpen },
   { id: "create", label: "Create daily session", icon: FiPlusCircle },
   { id: "sessions", label: "Recurring sessions", icon: FiCalendar },
   { id: "attendance", label: "Attendance", icon: FiUserCheck },
-  { id: "earnings", label: "Earnings", icon: FiDollarSign },
-];
-
-const fieldLabels = {
-  courseTitle: "Course",
-  title: "Session title",
-  description: "Description",
-  startTime: "Start time",
-  endTime: "End time",
-  meetingLink: "Meeting link",
-};
-
-const categorySuggestions = [
-  "Frontend Development",
-  "Backend Development",
-  "Full Stack Development",
-  "Web Development",
-  "Mobile App Development",
-  "Programming",
-  "Database",
-  "DevOps",
-  "Cloud Computing",
-  "UI/UX Design",
-];
-
-const subtitleSuggestions = [
-  "Daily practical session",
-  "Live coding practice",
-  "Project-based training",
-  "Interview preparation session",
-  "Beginner friendly live class",
-  "Advanced implementation session",
-  "Hands-on doubt clearing session",
+  { id: "earnings", label: "Payments", icon: FiCreditCard },
 ];
 
 const emptyConfirmDialog = {
@@ -163,13 +119,6 @@ function getStatusClass(status) {
   return "bg-emerald-50 text-emerald-700 border-emerald-100";
 }
 
-function getEarningStatusClass(status) {
-  if (status === "paid") return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  if (status === "payable") return "bg-blue-50 text-blue-700 border-blue-100";
-  if (status === "on hold" || status === "on_hold") return "bg-red-50 text-red-700 border-red-100";
-  return "bg-amber-50 text-amber-700 border-amber-100";
-}
-
 function formatMoney(value) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -196,9 +145,10 @@ export default function TrainerDashboardPage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
+  const [paymentMenuOpen, setPaymentMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(initialSessionForm);
   const [courses, setCourses] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [message, setMessage] = useState("");
@@ -206,17 +156,7 @@ export default function TrainerDashboardPage() {
   const [formErrors, setFormErrors] = useState({});
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(true);
-  const [earnings, setEarnings] = useState({
-    totalEarnings: 0,
-    pendingEarnings: 0,
-    payableEarnings: 0,
-    paidEarnings: 0,
-    sessionEarnings: [],
-  });
-  const [payouts, setPayouts] = useState([]);
-  const [sessionEarningDetails, setSessionEarningDetails] = useState({});
-  const [loadingEarnings, setLoadingEarnings] = useState(true);
-  const [earningsError, setEarningsError] = useState("");
+  const [activePaymentView, setActivePaymentView] = useState("wallet");
   const [submitting, setSubmitting] = useState(false);
   const [actionId, setActionId] = useState("");
   const [editingSessionId, setEditingSessionId] = useState("");
@@ -224,6 +164,7 @@ export default function TrainerDashboardPage() {
   const [isTrainerActive, setIsTrainerActive] = useState(true);
   const [statusLoading, setStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState("");
+  const statusCheckBlockedRef = useRef(false);
 
   const activeSessions = useMemo(
     () => sessions.filter((session) => !session.isEnded && session.status !== "ended"),
@@ -287,11 +228,13 @@ export default function TrainerDashboardPage() {
   };
 
   const loadTrainerStatus = async ({ silent = false } = {}) => {
+    if (statusCheckBlockedRef.current) return;
     if (!silent) setStatusLoading(true);
     try {
       const status = await getTrainerStatus();
       setIsTrainerActive(status.isActive);
-      setStatusError("");
+      setStatusError(status.message || "");
+      if (status.isStatusForbidden) statusCheckBlockedRef.current = true;
     } catch (err) {
       setStatusError(err?.message || "Unable to verify trainer account status.");
     } finally {
@@ -299,49 +242,16 @@ export default function TrainerDashboardPage() {
     }
   };
 
-  const loadEarnings = async ({ silent = false } = {}) => {
-    if (!silent) setLoadingEarnings(true);
-    try {
-      const [nextEarnings, nextPayouts] = await Promise.all([
-        getTrainerEarnings(),
-        getTrainerPayouts(),
-      ]);
-      setEarnings(nextEarnings);
-      setPayouts(nextPayouts);
-      setEarningsError("");
-    } catch (err) {
-      setEarningsError(err?.message || "Unable to load trainer earnings.");
-    } finally {
-      if (!silent) setLoadingEarnings(false);
-    }
-  };
-
   useEffect(() => {
     loadCourses();
     loadSessions();
     loadTrainerStatus();
-    loadEarnings();
     const intervalId = window.setInterval(() => {
       loadTrainerStatus({ silent: true });
       loadSessions({ silent: true });
-      loadEarnings({ silent: true });
     }, 30000);
     return () => window.clearInterval(intervalId);
   }, []);
-
-  const loadSessionEarningDetails = async (sessionId) => {
-    if (!sessionId) return;
-    setActionId(`earnings:${sessionId}`);
-    try {
-      const details = await getTrainerSessionEarnings(sessionId);
-      setSessionEarningDetails((prev) => ({ ...prev, [sessionId]: details }));
-      setEarningsError("");
-    } catch (err) {
-      setEarningsError(err?.message || "Unable to load session earnings.");
-    } finally {
-      setActionId("");
-    }
-  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -372,7 +282,7 @@ export default function TrainerDashboardPage() {
   const validateForm = () => {
     const required = ["courseTitle", "title", "description", "startTime", "endTime", "meetingLink"];
     const nextErrors = required.reduce((acc, key) => {
-      if (!String(form[key] || "").trim()) acc[key] = `${fieldLabels[key]} is required.`;
+      if (!String(form[key] || "").trim()) acc[key] = `${sessionFieldLabels[key]} is required.`;
       return acc;
     }, {});
 
@@ -439,7 +349,7 @@ export default function TrainerDashboardPage() {
       const successMessage = editingSessionId
         ? "Recurring live session updated successfully."
         : "Daily recurring live session created successfully.";
-      setForm(initialForm);
+      setForm(initialSessionForm);
       setFormErrors({});
       setEditingSessionId("");
       setMessage(successMessage);
@@ -497,7 +407,7 @@ export default function TrainerDashboardPage() {
 
   const cancelEditing = () => {
     setEditingSessionId("");
-    setForm(initialForm);
+    setForm(initialSessionForm);
     setMessage("");
     setError("");
     setFormErrors({});
@@ -611,20 +521,21 @@ export default function TrainerDashboardPage() {
     navigate(PATHS.LOGIN);
   };
 
-  const renderTabButton = ({ id, label, icon: Icon }) => (
+  const renderPaymentSubButton = ({ id, label, icon: Icon }) => (
     <button
       key={id}
       type="button"
       onClick={() => {
-        setActiveTab(id);
+        setActiveTab("earnings");
+        setActivePaymentView(id);
         setMobileSidebarOpen(false);
       }}
       className={[
-        "w-full h-11 rounded-xl text-sm font-extrabold inline-flex items-center justify-center gap-3 transition-colors",
-        activeTab === id
-          ? "bg-white text-[#00342b]"
-          : "text-white/70 hover:bg-white/10 hover:text-white",
-        sidebarCollapsed ? "lg:px-0" : "px-4 justify-start",
+        "w-full h-10 rounded-xl text-xs font-extrabold inline-flex items-center gap-3 transition-colors",
+        activeTab === "earnings" && activePaymentView === id
+          ? "bg-white text-[#00342b] shadow-sm"
+          : "text-white/65 hover:bg-white/10 hover:text-white",
+        sidebarCollapsed ? "lg:justify-center lg:px-0" : "px-4",
       ].join(" ")}
       title={label}
     >
@@ -632,6 +543,52 @@ export default function TrainerDashboardPage() {
       <span className={sidebarCollapsed ? "hidden" : "inline truncate"}>{label}</span>
     </button>
   );
+
+  const renderTabButton = ({ id, label, icon: Icon }) => {
+    const isPaymentsTab = id === "earnings";
+    return (
+      <div key={id} className="space-y-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (isPaymentsTab) {
+              setPaymentMenuOpen((prev) => !prev);
+              setActiveTab("earnings");
+              if (!activePaymentView) setActivePaymentView("wallet");
+              return;
+            }
+            setActiveTab(id);
+            setPaymentMenuOpen(false);
+            setMobileSidebarOpen(false);
+          }}
+          className={[
+            "w-full h-11 rounded-xl text-sm font-extrabold inline-flex items-center gap-3 transition-colors",
+            activeTab === id
+              ? "bg-white text-[#00342b] shadow-sm"
+              : "text-white/75 hover:bg-white/10 hover:text-white",
+            sidebarCollapsed ? "lg:justify-center lg:px-0" : "justify-start px-4",
+          ].join(" ")}
+          title={label}
+        >
+          <Icon className="flex-shrink-0" />
+          <span className={sidebarCollapsed ? "hidden" : "inline truncate"}>{label}</span>
+          {isPaymentsTab && !sidebarCollapsed ? (
+            <FiChevronDown
+              className={[
+                "ml-auto flex-shrink-0 transition-transform",
+                paymentMenuOpen ? "rotate-180" : "",
+              ].join(" ")}
+            />
+          ) : null}
+        </button>
+        {isPaymentsTab && paymentMenuOpen ? (
+          <div className={["space-y-1", sidebarCollapsed ? "" : "pl-3"].join(" ")}>
+            {paymentViews.map(renderPaymentSubButton)}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   const fieldClass = (name, extra = "") =>
     [
@@ -763,9 +720,9 @@ export default function TrainerDashboardPage() {
 
           <nav className="mt-10 space-y-2">{tabs.map(renderTabButton)}</nav>
 
-          <div className={["mt-auto rounded-2xl bg-white/10 p-2 lg:p-4", sidebarCollapsed ? "lg:px-2" : ""].join(" ")}>
+          <div className={["mt-auto pt-5", sidebarCollapsed ? "lg:px-0" : ""].join(" ")}>
             {sidebarCollapsed ? (
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-sm font-extrabold">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-extrabold">
                 {(user?.fullName || "T").slice(0, 1).toUpperCase()}
               </div>
             ) : (
@@ -777,7 +734,10 @@ export default function TrainerDashboardPage() {
             <button
               type="button"
               onClick={logout}
-              className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/20 text-sm font-extrabold transition-colors hover:bg-white/10"
+              className={[
+                "mt-4 inline-flex h-10 w-full items-center gap-2 rounded-xl bg-red-500/15 text-sm font-extrabold text-red-100 transition-colors hover:bg-red-500/25 hover:text-white",
+                sidebarCollapsed ? "justify-center" : "justify-start px-4",
+              ].join(" ")}
               title="Log out"
             >
               <FiLogOut />
@@ -1381,169 +1341,10 @@ export default function TrainerDashboardPage() {
             ) : null}
 
             {activeTab === "earnings" ? (
-              <section className="space-y-6">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                    <div>
-                      <h2 className="text-xl font-extrabold">Trainer earnings</h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        View admin-set pricing, paid student counts, session revenue, trainer share, and payout status.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => loadEarnings()}
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-extrabold text-slate-700 transition-colors hover:border-[#006b58]"
-                    >
-                      <FiRefreshCw className={loadingEarnings ? "animate-spin" : ""} />
-                      Refresh
-                    </button>
-                  </div>
-
-                  <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-                    Pricing and commission are controlled by admin. Trainers can view earnings only.
-                  </div>
-
-                  {earningsError ? (
-                    <div className="mt-5 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                      <FiAlertCircle className="mt-0.5 flex-shrink-0" />
-                      <span>{earningsError}</span>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    {[
-                      ["Total earnings", earnings.totalEarnings, FiDollarSign],
-                      ["Pending earnings", earnings.pendingEarnings, FiClock],
-                      ["Payable earnings", earnings.payableEarnings, FiCheckCircle],
-                      ["Paid earnings", earnings.paidEarnings, FiCreditCard],
-                    ].map(([label, value, Icon]) => (
-                      <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <Icon className="text-xl text-[#006b58]" />
-                        <div className="mt-4 text-xl font-extrabold">{formatMoney(value)}</div>
-                        <div className="mt-1 text-sm font-semibold text-slate-500">{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                  <h3 className="text-lg font-extrabold">Session-wise earnings</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Each card shows only admin-managed price and payout information.
-                  </p>
-
-                  <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    {loadingEarnings ? (
-                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-8 text-center xl:col-span-2">
-                        <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#00342b]" />
-                        <div className="mt-3 text-lg font-extrabold">Loading earnings</div>
-                      </div>
-                    ) : earnings.sessionEarnings.length === 0 ? (
-                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-8 text-center xl:col-span-2">
-                        <FiDollarSign className="mx-auto text-4xl text-slate-300" />
-                        <div className="mt-3 text-lg font-extrabold">No earnings yet</div>
-                        <p className="mt-1 text-sm text-slate-500">Paid student earnings will appear here.</p>
-                      </div>
-                    ) : (
-                      earnings.sessionEarnings.map((earning) => {
-                        const details = sessionEarningDetails[earning.sessionId];
-                        const display = details || earning;
-                        return (
-                          <article key={earning.sessionId || earning.sessionTitle} className="rounded-2xl border border-slate-200 bg-white p-5">
-                            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                              <div>
-                                <h4 className="text-base font-extrabold text-slate-950">{display.sessionTitle}</h4>
-                                <p className="mt-1 text-xs font-semibold text-slate-500">
-                                  Admin-set price and trainer share are view-only.
-                                </p>
-                              </div>
-                              <span
-                                className={[
-                                  "inline-flex shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider",
-                                  getEarningStatusClass(display.status),
-                                ].join(" ")}
-                              >
-                                {display.status}
-                              </span>
-                            </div>
-
-                            <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <div className="text-xs font-bold text-slate-500">Admin-set price</div>
-                                <div className="mt-1 font-extrabold">{formatMoney(display.adminSetPrice)}</div>
-                              </div>
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <div className="text-xs font-bold text-slate-500">Paid students</div>
-                                <div className="mt-1 font-extrabold">{display.paidStudents}</div>
-                              </div>
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <div className="text-xs font-bold text-slate-500">Gross revenue</div>
-                                <div className="mt-1 font-extrabold">{formatMoney(display.grossRevenue)}</div>
-                              </div>
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <div className="text-xs font-bold text-slate-500">Trainer share</div>
-                                <div className="mt-1 font-extrabold">{display.trainerSharePercent}%</div>
-                              </div>
-                              <div className="col-span-2 rounded-xl bg-emerald-50 p-3">
-                                <div className="text-xs font-bold text-emerald-700">Trainer earning</div>
-                                <div className="mt-1 text-lg font-extrabold text-emerald-900">
-                                  {formatMoney(display.trainerEarning)}
-                                </div>
-                              </div>
-                            </div>
-
-                            {earning.sessionId ? (
-                              <button
-                                type="button"
-                                onClick={() => loadSessionEarningDetails(earning.sessionId)}
-                                disabled={actionId === `earnings:${earning.sessionId}`}
-                                className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-extrabold text-slate-700 transition-colors hover:border-[#006b58] disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                <FiRefreshCw className={actionId === `earnings:${earning.sessionId}` ? "animate-spin" : ""} />
-                                Refresh session earning
-                              </button>
-                            ) : null}
-                          </article>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                  <h3 className="text-lg font-extrabold">Payout status</h3>
-                  <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-                    {payouts.length === 0 ? (
-                      <div className="bg-slate-50 p-6 text-sm font-semibold text-slate-500">
-                        No payout records available yet.
-                      </div>
-                    ) : (
-                      payouts.map((payout) => (
-                        <div key={payout.id || `${payout.amount}:${payout.status}`} className="grid grid-cols-1 gap-2 border-b border-slate-100 p-4 last:border-b-0 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-                          <div>
-                            <div className="text-sm font-extrabold">{formatMoney(payout.amount)}</div>
-                            <div className="mt-1 text-xs font-semibold text-slate-500">
-                              {payout.reference ? `Reference: ${payout.reference}` : "Payout record"}
-                            </div>
-                          </div>
-                          <span
-                            className={[
-                              "inline-flex w-fit rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider",
-                              getEarningStatusClass(payout.status),
-                            ].join(" ")}
-                          >
-                            {payout.status}
-                          </span>
-                          <div className="text-xs font-semibold text-slate-500">
-                            {payout.paidAt || payout.requestedAt || ""}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </section>
+              <TrainerPaymentsSection
+                activeView={activePaymentView}
+                isTrainerActive={isTrainerActive}
+              />
             ) : null}
           </div>
         </section>

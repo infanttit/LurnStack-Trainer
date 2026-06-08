@@ -34,12 +34,20 @@ export function AuthProvider({ children }) {
         return next || null;
       },
       signIn: async ({ email, password, remember = true, role = "student" }) => {
-        const next =
-          role === "trainer"
-            ? await authenticateTrainer({ email, password, persist: !!remember })
-            : await authenticateUser({ email, password, persist: !!remember });
-        setUser(next || null);
-        return next || null;
+        logoutUser();
+        setUser(null);
+        try {
+          const next =
+            role === "trainer"
+              ? await authenticateTrainer({ email, password, persist: !!remember })
+              : await authenticateUser({ email, password, persist: !!remember });
+          setUser(next || null);
+          return next || null;
+        } catch (err) {
+          logoutUser();
+          setUser(null);
+          throw err;
+        }
       },
       signOut: async () => {
         logoutUser();

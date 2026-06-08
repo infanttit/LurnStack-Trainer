@@ -50,13 +50,38 @@ function normalizeRole(role) {
   return value === "trainer" ? "trainer" : "student";
 }
 
+function parseJwtPayload(token) {
+  try {
+    const [, payload] = String(token || "").split(".");
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+    return JSON.parse(window.atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function getTokenRole(token) {
+  const payload = parseJwtPayload(token);
+  const rawRole =
+    payload?.role ||
+    payload?.ROLE ||
+    payload?.userRole ||
+    payload?.USER_ROLE ||
+    payload?.accountType ||
+    payload?.ACCOUNT_TYPE;
+  return rawRole ? normalizeRole(rawRole) : "";
+}
+
 function toPublicUser(user) {
   if (!user || typeof user !== "object") return null;
   const fullName = user.fullName || user.FULL_NAME || user.name || "";
   const email = user.email || user.EMAIL_ADDRESS || "";
   const phoneNumber = user.phoneNumber || user.PHONE_NUMBER || "";
+  const role = user.role || user.ROLE || user.userRole || user.USER_ROLE || user.accountType || user.ACCOUNT_TYPE;
   const { password, PASSWORD, token, ...rest } = user;
-  return { ...rest, fullName, email, phoneNumber, role: normalizeRole(user.role) };
+  return { ...rest, fullName, email, phoneNumber, role: normalizeRole(role) };
 }
 
 function ensureExpectedRole(user, expectedRole) {
@@ -66,10 +91,15 @@ function ensureExpectedRole(user, expectedRole) {
 }
 
 async function loginAndPersist({ email, password, persist, expectedRole }) {
-  const result = await loginApi({ email, password });
+  logoutUser();
+  const result = await loginApi({ email, password, role: expectedRole });
   if (!result.token) throw new Error("Login succeeded but no session token was returned.");
   const user = toPublicUser(result.user);
   ensureExpectedRole(user, expectedRole);
+  const tokenRole = getTokenRole(result.token);
+  if (tokenRole && tokenRole !== normalizeRole(expectedRole)) {
+    throw new Error("Backend returned a non-trainer session token. Please use trainer login on the backend.");
+  }
   saveToken(result.token, { persist });
   saveUser(user, { persist });
   return user;
