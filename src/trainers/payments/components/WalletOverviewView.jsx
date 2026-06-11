@@ -1,4 +1,4 @@
-import { FiCheckCircle, FiClock, FiCreditCard, FiDollarSign, FiLock, FiPlusCircle, FiSend } from "react-icons/fi";
+import { FiCheckCircle, FiClock, FiCreditCard, FiDollarSign, FiLock, FiSend } from "react-icons/fi";
 import { formatDate, formatMoney, getAccountLast4 } from "../paymentUtils";
 
 function WalletChip({ label, value }) {
@@ -42,12 +42,13 @@ function WalletRule({ icon: Icon, title, text }) {
   );
 }
 
-export default function WalletOverviewView({ earnings, eligibility, payoutAccount, onAddToWallet, onRequestPayout, payoutBlocked }) {
+export default function WalletOverviewView({ earnings, eligibility, payoutAccount, onRequestPayout, payoutBlocked, payoutBlockReason }) {
   const accountLast4 = getAccountLast4(payoutAccount);
   const walletStatus = payoutBlocked ? "Action required" : "Ready to request";
-  const walletBalance = Number(earnings.heldEarnings || 0);
-  const eligibleToAdd = Number(earnings.payableEarnings || 0);
-  const withdrawableAmount = walletBalance + eligibleToAdd;
+  const availableBalance = Number(
+    earnings.availableBalance ?? Number(earnings.payableEarnings || 0) + Number(earnings.heldEarnings || 0)
+  );
+  const lockedAmount = Number(earnings.lockedAmount || earnings.requestedEarnings || 0);
 
   return (
     <div className="space-y-5">
@@ -59,36 +60,30 @@ export default function WalletOverviewView({ earnings, eligibility, payoutAccoun
                 <FiCreditCard />
                 Trainer wallet
               </div>
-              <div className="mt-6 text-sm font-semibold text-white/65">Wallet balance</div>
-              <div className="mt-2 text-5xl font-black leading-none">{formatMoney(walletBalance)}</div>
+              <div className="mt-6 text-sm font-semibold text-white/65">Available balance</div>
+              <div className="mt-2 text-5xl font-black leading-none">{formatMoney(availableBalance)}</div>
               <p className="mt-4 max-w-xl text-sm font-semibold leading-relaxed text-white/70">
-                Trainer can keep cleared earnings here and withdraw later whenever payout rules are satisfied.
+                Cleared earnings become available after the payout cycle. Requests are reviewed and paid manually by admin.
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:min-w-[340px]">
+            <div className="lg:min-w-[220px]">
               <button
                 type="button"
-                onClick={onAddToWallet}
-                disabled={eligibleToAdd <= 0}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-[#00342b] transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-55"
-              >
-                <FiPlusCircle />
-                Add to wallet
-              </button>
-              <button
-                type="button"
-                onClick={() => onRequestPayout(withdrawableAmount)}
+                onClick={() => onRequestPayout(availableBalance)}
                 disabled={payoutBlocked}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-5 text-sm font-black text-[#00342b] transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-5 text-sm font-black text-[#00342b] transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-55"
               >
                 <FiSend />
-                Withdraw
+                Request payout
               </button>
+              {payoutBlockReason ? (
+                <p className="mt-3 text-xs font-bold leading-relaxed text-emerald-50/80">{payoutBlockReason}</p>
+              ) : null}
             </div>
           </div>
           <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <WalletChip label="Wallet status" value={walletStatus} />
-            <WalletChip label="Eligible to add" value={formatMoney(eligibleToAdd)} />
+            <WalletChip label="Available balance" value={formatMoney(availableBalance)} />
             <WalletChip label="Account" value={`${payoutAccount.bankName} ${accountLast4}`} />
           </div>
         </section>
@@ -116,9 +111,9 @@ export default function WalletOverviewView({ earnings, eligibility, payoutAccoun
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <BalanceBucket label="Total earned" value={formatMoney(earnings.totalEarnings)} helper="All trainer share earned from paid sessions." icon={FiDollarSign} />
-        <BalanceBucket label="Eligible to add" value={formatMoney(eligibleToAdd)} helper={`Cleared from ${formatDate(eligibility.cycleStart)} - ${formatDate(eligibility.cycleEnd)}.`} icon={FiPlusCircle} />
+        <BalanceBucket label="Available" value={formatMoney(availableBalance)} helper={`Cleared from ${formatDate(eligibility.cycleStart)} - ${formatDate(eligibility.cycleEnd)}.`} icon={FiSend} />
         <BalanceBucket label="Pending" value={formatMoney(earnings.pendingEarnings)} helper="Amount waiting for cycle clearance." icon={FiClock} />
-        <BalanceBucket label="Withdrawable" value={formatMoney(withdrawableAmount)} helper="Wallet balance plus eligible cleared earnings." icon={FiSend} tone="dark" />
+        <BalanceBucket label="Locked" value={formatMoney(lockedAmount)} helper="Amount already reserved for an active payout request." icon={FiLock} tone="dark" />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[0.95fr_1.05fr]">
@@ -147,9 +142,9 @@ export default function WalletOverviewView({ earnings, eligibility, payoutAccoun
         <section className="bg-white p-5 shadow-sm">
           <h3 className="text-lg font-black text-slate-950">Wallet rules</h3>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <WalletRule icon={FiPlusCircle} title="Add after cycle" text="15-day cleared earnings can be moved into wallet." />
-            <WalletRule icon={FiLock} title="Hold anytime" text="Trainer can keep wallet balance and withdraw later." />
-            <WalletRule icon={FiCheckCircle} title="Withdraw request" text="Admin approves and pays to verified bank account." />
+            <WalletRule icon={FiClock} title="Cycle clearance" text="Earnings become available after the 15-day payout cycle." />
+            <WalletRule icon={FiLock} title="Request lock" text="Requested amount is locked until admin pays or rejects it." />
+            <WalletRule icon={FiCheckCircle} title="Manual payout" text="Admin approves and pays to the verified bank account." />
           </div>
         </section>
       </div>

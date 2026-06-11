@@ -20,8 +20,8 @@ export function formatDate(value) {
 export function getEarningStatusClass(status) {
   const value = String(status || "").toLowerCase();
   if (value === "paid") return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  if (value === "payable") return "bg-blue-50 text-blue-700 border-blue-100";
-  if (value === "requested" || value === "processing") return "bg-indigo-50 text-indigo-700 border-indigo-100";
+  if (value === "available" || value === "payable") return "bg-blue-50 text-blue-700 border-blue-100";
+  if (value === "requested" || value === "approved" || value === "processing") return "bg-indigo-50 text-indigo-700 border-indigo-100";
   if (value === "on hold" || value === "on_hold" || value === "rejected") {
     return "bg-red-50 text-red-700 border-red-100";
   }
@@ -40,11 +40,11 @@ export function createAccountForm(account = {}) {
     bankName: account.bankName || "",
     accountNumber: account.accountNumber || "",
     confirmAccountNumber: account.accountNumber || "",
-    ifscCode: account.ifscCode || "",
+    ifscCode: account.ifscCode || account.ifsc || "",
     accountType: account.accountType || "Savings",
     phoneNumber: account.phoneNumber || "",
     upiId: account.upiId || "",
-    panNumber: account.panNumber || "",
+    panNumber: account.panNumber || account.pan || "",
   };
 }
 
@@ -63,13 +63,18 @@ export function getPayoutBlockReason({
   isTrainerActive,
 }) {
   const activeRequest = payoutRequests.find((request) =>
-    ["requested", "processing"].includes(String(request.status || "").toLowerCase())
+    ["requested", "approved", "processing"].includes(String(request.status || "").toLowerCase())
   );
   if (!isTrainerActive) return "Trainer account is inactive.";
   if (activeRequest) return "A payout request is already pending.";
-  if (payoutAccount?.status !== "verified") return "Add and verify payout account details first.";
+  if (earnings?.payoutBlockReason) return earnings.payoutBlockReason;
+  if (!payoutAccount || payoutAccount.status === "missing") return "Add payout account details first.";
+  if (payoutAccount?.status === "rejected") return payoutAccount.rejectionReason || "Payout account was rejected. Please update details.";
+  if (payoutAccount?.status !== "verified") return "Payout account is waiting for admin verification.";
   if (!eligibility?.isWindowOpen) return `Payout request opens on ${formatDate(eligibility?.requestOpensAt)}.`;
-  const withdrawableAmount = Number(earnings.payableEarnings || 0) + Number(earnings.heldEarnings || 0);
+  const withdrawableAmount = Number(
+    earnings.availableBalance ?? Number(earnings.payableEarnings || 0) + Number(earnings.heldEarnings || 0)
+  );
   if (withdrawableAmount < Number(earnings.minimumPayoutAmount || 0)) {
     return `Minimum payout amount is ${formatMoney(earnings.minimumPayoutAmount)}.`;
   }

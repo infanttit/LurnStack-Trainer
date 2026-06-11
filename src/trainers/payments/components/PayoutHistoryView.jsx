@@ -1,183 +1,268 @@
 import { useMemo, useState } from "react";
-import { FiCheckCircle, FiClock, FiCreditCard, FiFileText, FiSearch } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiDownload, FiFileText, FiSearch } from "react-icons/fi";
 import { formatDate, formatMoney, getEarningStatusClass } from "../paymentUtils";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 8;
 
-function HistoryStatus({ status }) {
+function getAmount(payout) {
+  return Number(payout.amount ?? payout.requestedAmount ?? 0);
+}
+
+function getReference(payout) {
+  return payout.utrReference || payout.reference || "";
+}
+
+function getRequestedDate(payout) {
+  return payout.requestedAt || payout.createdAt || "";
+}
+
+function getCompletedDate(payout) {
+  return payout.paidAt || payout.manualPaidDate || payout.processingAt || payout.approvedAt || "";
+}
+
+function getPeriodLabel(payout) {
+  const start = formatDate(payout.periodStart);
+  const end = formatDate(payout.periodEnd);
+  if (start === "-" && end === "-") return "-";
+  return `${start} - ${end}`;
+}
+
+function statusLabel(status) {
+  return String(status || "pending").replace(/_/g, " ");
+}
+
+function StatusPill({ status }) {
   return (
-    <span className={["inline-flex w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider", getEarningStatusClass(status)].join(" ")}>
-      {status || "pending"}
+    <span
+      className={[
+        "inline-flex w-fit whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-black uppercase leading-4",
+        getEarningStatusClass(status),
+      ].join(" ")}
+    >
+      {statusLabel(status)}
     </span>
   );
 }
 
-function HistoryMetric({ label, value, icon: Icon }) {
+function SummaryItem({ label, value }) {
   return (
-    <div className="bg-slate-50 px-4 py-3">
-      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-400">
-        <Icon className="text-[#006b58]" />
-        {label}
-      </div>
-      <div className="mt-2 text-lg font-extrabold text-slate-950">{value}</div>
+    <div className="border-r border-slate-200 px-4 py-3 last:border-r-0">
+      <div className="text-[10px] font-black uppercase text-slate-400">{label}</div>
+      <div className="mt-1 truncate text-sm font-extrabold text-slate-950">{value}</div>
     </div>
   );
-}
-
-function getTimelineLabel(payout) {
-  if (payout.paidAt) return `Paid on ${formatDate(payout.paidAt)}`;
-  if (payout.status === "payable") return "Ready for trainer request";
-  return `Requested on ${formatDate(payout.requestedAt)}`;
 }
 
 export default function PayoutHistoryView({ payouts = [] }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [page, setPage] = useState(1);
 
-  const statusOptions = useMemo(() => ["all", ...new Set(payouts.map((payout) => payout.status).filter(Boolean))], [payouts]);
+  const statusOptions = useMemo(
+    () => ["all", ...new Set(payouts.map((payout) => payout.status).filter(Boolean))],
+    [payouts]
+  );
+
   const filteredPayouts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    const now = new Date();
+    const cutoff = new Date(now);
+    if (dateFilter === "30") cutoff.setDate(now.getDate() - 30);
+    if (dateFilter === "90") cutoff.setDate(now.getDate() - 90);
+
     return payouts.filter((payout) => {
-      const searchable = [payout.id, payout.reference, payout.adminNote, payout.status]
+      const searchable = [
+        payout.id,
+        payout.status,
+        payout.adminNote,
+        payout.rejectionReason,
+        getReference(payout),
+        payout.payoutAccountSnapshot?.bankName,
+        payout.payoutAccountSnapshot?.accountNumberLast4,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
+      const requestedDate = new Date(getRequestedDate(payout));
       const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
       const matchesStatus = statusFilter === "all" || payout.status === statusFilter;
-      return matchesQuery && matchesStatus;
+      const matchesDate =
+        dateFilter === "all" ||
+        (!Number.isNaN(requestedDate.getTime()) && requestedDate >= cutoff);
+      return matchesQuery && matchesStatus && matchesDate;
     });
-  }, [payouts, query, statusFilter]);
+  }, [dateFilter, payouts, query, statusFilter]);
+
   const totalPages = Math.max(1, Math.ceil(filteredPayouts.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const visiblePayouts = filteredPayouts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const paidTotal = payouts
     .filter((payout) => String(payout.status || "").toLowerCase() === "paid")
-    .reduce((sum, payout) => sum + Number(payout.amount || 0), 0);
-  const pendingCount = payouts.filter((payout) => String(payout.status || "").toLowerCase() !== "paid").length;
-  const latestPayout = payouts.find((payout) => payout.paidAt);
+    .reduce((sum, payout) => sum + getAmount(payout), 0);
+  const requestedTotal = payouts
+    .filter((payout) => ["requested", "approved", "processing"].includes(String(payout.status || "").toLowerCase()))
+    .reduce((sum, payout) => sum + getAmount(payout), 0);
+  const latestReference = getReference(payouts.find((payout) => getReference(payout)) || {});
+
+  const resetPage = (setter) => (value) => {
+    setter(value);
+    setPage(1);
+  };
 
   return (
-    <div className="bg-white p-5 shadow-sm">
-      <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
-        <div>
-          <h3 className="text-xl font-extrabold text-slate-950">Payout history</h3>
-          <p className="mt-1 text-sm font-semibold text-slate-500">
-            Review requested, payable, and completed payout cycles with reference details.
-          </p>
+    <section className="overflow-hidden bg-white shadow-sm">
+      <div className="border-b border-slate-200 px-5 py-4">
+        <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+          <div>
+            <h3 className="text-base font-black text-slate-950">Payout history</h3>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              Search and verify payout requests, bank references, payout dates, and admin status.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-extrabold text-slate-700 hover:border-[#006b58] hover:text-[#00342b]"
+          >
+            <FiDownload />
+            Export
+          </button>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(240px,1fr)_170px] xl:w-[560px]">
+
+        <div className="mt-4 grid grid-cols-1 overflow-hidden rounded-xl border border-slate-200 sm:grid-cols-3">
+          <SummaryItem label="Paid total" value={formatMoney(paidTotal)} />
+          <SummaryItem label="Open requested" value={formatMoney(requestedTotal)} />
+          <SummaryItem label="Latest UTR" value={latestReference || "Pending"} />
+        </div>
+      </div>
+
+      <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_160px_auto] lg:items-center">
           <label className="relative block">
             <span className="sr-only">Search payout history</span>
-            <FiSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search reference or payout ID"
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-semibold outline-none focus:border-[#006b58] focus:ring-4 focus:ring-emerald-900/5"
+              onChange={(e) => resetPage(setQuery)(e.target.value)}
+              placeholder="Search payout ID, UTR, bank, note"
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs font-semibold outline-none focus:border-[#006b58] focus:ring-4 focus:ring-emerald-900/5"
             />
           </label>
+
           <select
             value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 outline-none focus:border-[#006b58] focus:ring-4 focus:ring-emerald-900/5"
+            onChange={(e) => resetPage(setStatusFilter)(e.target.value)}
+            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-extrabold capitalize text-slate-700 outline-none focus:border-[#006b58] focus:ring-4 focus:ring-emerald-900/5"
           >
             {statusOptions.map((status) => (
               <option key={status} value={status}>
-                {status === "all" ? "All payouts" : status}
+                {status === "all" ? "All status" : statusLabel(status)}
               </option>
             ))}
           </select>
-        </div>
-      </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <HistoryMetric label="Total paid" value={formatMoney(paidTotal)} icon={FiCreditCard} />
-        <HistoryMetric label="Open items" value={`${pendingCount} payout${pendingCount === 1 ? "" : "s"}`} icon={FiClock} />
-        <HistoryMetric label="Latest reference" value={latestPayout?.reference || "Pending"} icon={FiFileText} />
-      </div>
+          <select
+            value={dateFilter}
+            onChange={(e) => resetPage(setDateFilter)(e.target.value)}
+            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-extrabold text-slate-700 outline-none focus:border-[#006b58] focus:ring-4 focus:ring-emerald-900/5"
+          >
+            <option value="all">All dates</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
 
-      <div className="mt-6 overflow-hidden border-y border-slate-100">
-        <div className="hidden grid-cols-[minmax(320px,1.4fr)_170px_minmax(210px,0.9fr)_230px] gap-6 border-b border-slate-100 bg-slate-50 px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-400 xl:grid">
-          <div>Payout cycle</div>
-          <div>Amount</div>
-          <div>Reference</div>
-          <div>Timeline</div>
-        </div>
-        {filteredPayouts.length === 0 ? (
-          <div className="py-12 text-center">
-            <FiFileText className="mx-auto text-4xl text-slate-300" />
-            <div className="mt-3 text-lg font-extrabold text-slate-950">No payout records found</div>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Try another search or status filter.</p>
+          <div className="text-xs font-bold text-slate-500 lg:text-right">
+            {filteredPayouts.length} result{filteredPayouts.length === 1 ? "" : "s"}
           </div>
-        ) : (
-          visiblePayouts.map((payout) => (
-            <article key={payout.id} className="border-b border-slate-100 px-5 py-5 last:border-b-0">
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(320px,1.4fr)_170px_minmax(210px,0.9fr)_230px] xl:items-center xl:gap-6">
-                <div>
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00342b] text-white">
-                      {payout.status === "paid" ? <FiCheckCircle /> : <FiClock />}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h4 className="text-sm font-black text-slate-950">{payout.id}</h4>
-                        <HistoryStatus status={payout.status} />
-                      </div>
-                      <p className="mt-1 text-xs font-bold text-slate-500">
-                        Cycle {formatDate(payout.periodStart)} - {formatDate(payout.periodEnd)}
-                      </p>
-                      <p className="mt-2 text-xs font-semibold text-slate-500">{payout.adminNote || "No admin note added."}</p>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wider text-slate-400 xl:hidden">Amount</div>
-                  <div className="mt-1 text-xl font-extrabold text-slate-950">{formatMoney(payout.amount)}</div>
-                </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wider text-slate-400 xl:hidden">Reference</div>
-                  <div className="mt-1 break-words text-sm font-extrabold text-slate-700">{payout.reference || "Reference pending"}</div>
-                </div>
-                <div className="bg-slate-50 px-4 py-3 text-sm font-extrabold text-slate-700">
-                  {getTimelineLabel(payout)}
-                </div>
-              </div>
-            </article>
-          ))
-        )}
+        </div>
       </div>
 
-      <div className="flex flex-col justify-between gap-3 pt-4 sm:flex-row sm:items-center">
-        <div className="text-sm font-bold text-slate-500">
-          Showing {visiblePayouts.length} of {filteredPayouts.length} payouts. Page {currentPage} of {totalPages}.
+      <div className="overflow-x-auto">
+        <table className="min-w-[1080px] w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-slate-200 bg-white text-[10px] font-black uppercase text-slate-400">
+              <th className="px-4 py-3">Payout ID</th>
+              <th className="px-4 py-3">Period</th>
+              <th className="px-4 py-3 text-right">Amount</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Requested</th>
+              <th className="px-4 py-3">Completed</th>
+              <th className="px-4 py-3">UTR / Reference</th>
+              <th className="px-4 py-3">Admin note</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-xs">
+            {visiblePayouts.length ? (
+              visiblePayouts.map((payout) => (
+                <tr key={payout.id} className="hover:bg-slate-50/80">
+                  <td className="max-w-[180px] px-4 py-3 align-top">
+                    <div className="truncate font-black text-slate-950">{payout.id || "-"}</div>
+                    <div className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                      {payout.payoutAccountSnapshot?.bankName || "Bank"} {payout.payoutAccountSnapshot?.accountNumberLast4 ? `*${payout.payoutAccountSnapshot.accountNumberLast4}` : ""}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 align-top font-semibold text-slate-600">{getPeriodLabel(payout)}</td>
+                  <td className="px-4 py-3 text-right align-top font-black text-slate-950">
+                    {formatMoney(getAmount(payout))}
+                  </td>
+                  <td className="px-4 py-3 align-top"><StatusPill status={payout.status} /></td>
+                  <td className="px-4 py-3 align-top font-semibold text-slate-600">{formatDate(getRequestedDate(payout))}</td>
+                  <td className="px-4 py-3 align-top font-semibold text-slate-600">{formatDate(getCompletedDate(payout))}</td>
+                  <td className="max-w-[190px] px-4 py-3 align-top">
+                    <div className="truncate font-extrabold text-slate-700" title={getReference(payout) || "Reference pending"}>
+                      {getReference(payout) || "Reference pending"}
+                    </div>
+                  </td>
+                  <td className="max-w-[220px] px-4 py-3 align-top">
+                    <div className="line-clamp-2 font-semibold text-slate-500" title={payout.adminNote || payout.rejectionReason || ""}>
+                      {payout.adminNote || payout.rejectionReason || "-"}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center">
+                  <FiFileText className="mx-auto text-3xl text-slate-300" />
+                  <div className="mt-3 text-sm font-black text-slate-950">No payout records found</div>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Try a different search, status, or date filter.</p>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex flex-col justify-between gap-3 border-t border-slate-200 px-5 py-3 sm:flex-row sm:items-center">
+        <div className="text-xs font-bold text-slate-500">
+          Showing {visiblePayouts.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-
+          {Math.min(currentPage * PAGE_SIZE, filteredPayouts.length)} of {filteredPayouts.length}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setPage((value) => Math.max(1, value - 1))}
             disabled={currentPage === 1}
-            className="h-10 rounded-xl bg-slate-100 px-4 text-sm font-extrabold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-extrabold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Previous
+            <FiChevronLeft />
+            Prev
           </button>
+          <span className="min-w-16 text-center text-xs font-black text-slate-500">
+            {currentPage} / {totalPages}
+          </span>
           <button
             type="button"
             onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
             disabled={currentPage === totalPages}
-            className="h-10 rounded-xl bg-[#00342b] px-4 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#00342b] px-3 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Next
+            <FiChevronRight />
           </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

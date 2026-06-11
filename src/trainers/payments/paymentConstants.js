@@ -6,7 +6,7 @@ import {
   FiUser,
 } from "react-icons/fi";
 
-export const USE_MOCK_TRAINER_PAYMENTS = true;
+export const USE_MOCK_TRAINER_PAYMENTS = false;
 
 export const paymentViews = [
   { id: "wallet", label: "Wallet overview", icon: FiDollarSign },
