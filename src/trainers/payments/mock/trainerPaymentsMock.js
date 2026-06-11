@@ -3,6 +3,8 @@ export const trainerPaymentsMock = {
     totalEarnings: 48500,
     pendingEarnings: 11200,
     payableEarnings: 18700,
+    availableBalance: 24900,
+    lockedAmount: 0,
     requestedEarnings: 0,
     paidEarnings: 18600,
     heldEarnings: 6200,
@@ -43,7 +45,7 @@ export const trainerPaymentsMock = {
       platformSharePercent: 60,
       trainerEarning: 12800,
       platformEarning: 19200,
-      status: "payable",
+      status: "available",
     },
     {
       sessionId: "react-frontend-live",
@@ -103,7 +105,7 @@ export const trainerPaymentsMock = {
       platformSharePercent: 58,
       trainerEarning: 8316,
       platformEarning: 11484,
-      status: "payable",
+      status: "available",
     },
     {
       sessionId: "sql-database-live",
@@ -139,7 +141,7 @@ export const trainerPaymentsMock = {
       platformSharePercent: 62,
       trainerEarning: 7904,
       platformEarning: 12896,
-      status: "payable",
+      status: "available",
     },
     {
       sessionId: "mongodb-live",
@@ -182,7 +184,7 @@ export const trainerPaymentsMock = {
     {
       id: "PO-2026-06-01",
       amount: 18700,
-      status: "payable",
+      status: "available",
       periodStart: "2026-06-01",
       periodEnd: "2026-06-15",
       requestedAt: "2026-06-15",
