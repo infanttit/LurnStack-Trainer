@@ -1,4 +1,4 @@
-import { loginApi, registerApi } from "../api/authApi";
+import { getAuthProfileApi, loginApi, registerApi } from "../api/authApi";
 
 const USER_KEY = "lurnstack:auth:user:v1";
 const TOKEN_KEY = "lurnstack:auth:token:v1";
@@ -157,13 +157,21 @@ export async function registerTrainer({ fullName, email, phoneNumber, password, 
     ensureExpectedRole(user, "trainer");
     saveToken(result.token, { persist });
     saveUser(user, { persist });
-    return user;
   }
-  return loginAndPersist({ email, password, persist, expectedRole: "trainer" });
 }
 
 export async function authenticateTrainer({ email, password, persist = true }) {
   return loginAndPersist({ email, password, persist, expectedRole: "trainer" });
+}
+
+export async function authenticateWithToken({ token, persist = true }) {
+  const safeToken = String(token || "").trim();
+  if (!safeToken) throw new Error("Missing authentication token.");
+  saveToken(safeToken, { persist });
+  const user = await getAuthProfileApi();
+  ensureExpectedRole(user, "trainer");
+  saveUser(user, { persist });
+  return user;
 }
 
 export function logoutUser() {
