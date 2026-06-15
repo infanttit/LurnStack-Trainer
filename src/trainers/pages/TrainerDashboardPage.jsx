@@ -183,6 +183,9 @@ export default function TrainerDashboardPage() {
       nextErrors.startTime = "Choose a valid start time.";
       nextErrors.endTime = "End time must be after start time.";
     }
+    if (form.isRecurring && (!form.recurringDays || form.recurringDays.length === 0)) {
+      nextErrors.recurringDays = "Please select at least one recurring day.";
+    }
     setFormErrors(nextErrors);
     return nextErrors;
   };
@@ -274,6 +277,12 @@ export default function TrainerDashboardPage() {
         thumbnailFile: null,
         isRecurring: details.isRecurring !== false,
         recurrenceType: details.recurrenceType || "daily",
+        trainerInstructions: details.trainerInstructions || "",
+        recurringDays: details.recurringDays || [],
+        enableWhatsApp: details.enableWhatsApp !== false,
+        whatsappTemplateName: details.whatsappTemplateName || "",
+        whatsappCustomTitle: details.whatsappCustomTitle || "",
+        whatsappButtonUrl: details.whatsappButtonUrl || "",
       });
       setMessage("");
       setError("");
