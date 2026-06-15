@@ -13,6 +13,7 @@ export const initialSessionForm = {
   thumbnailFile: null,
   isRecurring: true,
   recurrenceType: "weekly",
+  recurrenceType: "daily",
   trainerInstructions: "",
   recurringDays: [],
   enableWhatsApp: true,

@@ -108,3 +108,32 @@ export async function getAuthProfileApi() {
 
   throw new Error(getAxiosErrorMessage(lastError, "Profile endpoint is not available yet."));
 }
+
+export async function sendOtpApi({ identifier, type = "email" }) {
+  try {
+    const res = await axiosClient.post("/api/auth/send-otp", {
+      identifier,
+      type,
+    });
+    return unwrap(res);
+  } catch (err) {
+    throw new Error(getAxiosErrorMessage(err, "Unable to send OTP. Please try again."));
+  }
+}
+
+export async function verifyOtpApi({ identifier, code }) {
+  try {
+    const res = await axiosClient.post("/api/auth/verify-otp", {
+      identifier,
+      code,
+    });
+    return unwrap(res);
+  } catch (err) {
+    const status = getAxiosErrorStatus(err);
+    if (status === 401) throw new Error("Incorrect OTP, please try again.");
+    if (status === 410) throw new Error("OTP has expired. Please request a new code.");
+    if (status === 404) throw new Error("No active OTP found. Please request a new code.");
+    throw new Error(getAxiosErrorMessage(err, "OTP verification failed. Please try again."));
+  }
+}
+

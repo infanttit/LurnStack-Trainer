@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import loginImage from "../../assets/Images/Signup.jpeg";
 import brandLogo from "../../assets/Logo/Logo3.png";
 import { useAuth } from "../model/AuthContext";
+import { sendOtpApi, verifyOtpApi } from "../api/authApi";
 import { PATHS } from "../../app/router/paths";
 import { isStrongPassword, isValidEmail, normalizeEmail, passwordPolicyText } from "../lib/validation";
 
@@ -80,6 +80,38 @@ const GlobalStyles = () => (
       from { opacity: 0; transform: translateY(20px) scale(0.98); }
       to   { opacity: 1; transform: translateY(0) scale(1); }
     }
+
+    .auth-shell {
+      position: relative;
+      isolation: isolate;
+      background:
+        radial-gradient(circle at 16% 10%, rgba(84, 212, 16, 0.24), transparent 28%),
+        radial-gradient(circle at 90% 18%, rgba(0, 77, 61, 0.13), transparent 34%),
+        linear-gradient(135deg, #f7fff3 0%, #ffffff 46%, #f2fbf6 100%);
+    }
+    .auth-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0, 77, 61, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 77, 61, 0.045) 1px, transparent 1px);
+      background-size: 46px 46px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.78), transparent 78%);
+    }
+    .auth-card {
+      position: relative;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.12);
+      backdrop-filter: blur(14px);
+    }
+    .auth-card::before {
+      content: none;
+    }
+    .auth-content { position: relative; z-index: 1; }
+    .auth-mark { box-shadow: 0 18px 38px rgba(84, 212, 16, 0.2); }
   `}</style>
 );
 
@@ -394,15 +426,45 @@ const PHONE_LENGTH_BY_COUNTRY_CODE = {
   "+998": [9],
 };
 
+const blankOtpState = {
+  sent: false,
+  verified: false,
+  identifier: "",
+  expiresAt: "",
+  secondsLeft: 0,
+  cooldown: 0,
+  attempts: 0,
+  digits: ["", "", "", "", "", ""],
+};
+
+function formatSeconds(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+}
+
 function getPhoneValidationMessage(countryCode, rawPhoneNumber) {
   const digits = String(rawPhoneNumber || "").replace(/\D/g, "");
   if (!digits) return "Phone number is required";
+  
   const countryDigits = String(countryCode || "").replace(/\D/g, "");
+  const lengths = PHONE_LENGTH_BY_COUNTRY_CODE[countryCode] || [];
+
   if (countryDigits && digits.startsWith(countryDigits)) {
-    return "Enter only the phone number after the country code";
+    const remainingDigits = digits.slice(countryDigits.length);
+    if (lengths.length) {
+      if (lengths.includes(remainingDigits.length) && !lengths.includes(digits.length)) {
+        return "Enter only the phone number after the country code";
+      }
+    } else {
+      const fullLengthValid = digits.length >= 7 && digits.length <= 15;
+      const remainingLengthValid = remainingDigits.length >= 7 && remainingDigits.length <= 15;
+      if (remainingLengthValid && !fullLengthValid) {
+        return "Enter only the phone number after the country code";
+      }
+    }
   }
 
-  const lengths = PHONE_LENGTH_BY_COUNTRY_CODE[countryCode] || [];
   if (lengths.length && !lengths.includes(digits.length)) {
     const formattedLengths = lengths.length === 1 ? lengths[0] : lengths.join(" or ");
     return `Enter a valid ${formattedLengths}-digit phone number`;
@@ -635,7 +697,7 @@ export default function SignupPage() {
     countryCode: "+91",
     phoneNumber: "",
     password: "",
-    agree: false,
+    agree: true,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
@@ -644,6 +706,28 @@ export default function SignupPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [toastTone, setToastTone] = useState("warn");
   const [formError, setFormError] = useState("");
+  const [emailOtp, setEmailOtp] = useState(blankOtpState);
+  const emailOtpRefs = useRef([]);
+  const ENABLE_EMAIL_OTP = true;
+
+  useEffect(() => {
+    if (!emailOtp.expiresAt) return undefined;
+    const tick = () => {
+      const remaining = Math.max(0, Math.floor((new Date(emailOtp.expiresAt).getTime() - Date.now()) / 1000));
+      setEmailOtp((current) => ({ ...current, secondsLeft: remaining }));
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [emailOtp.expiresAt]);
+
+  useEffect(() => {
+    if (emailOtp.cooldown <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setEmailOtp((current) => ({ ...current, cooldown: Math.max(0, current.cooldown - 1) }));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [emailOtp.cooldown]);
   if (isAuthenticated) {
     return (
       <Navigate
@@ -681,7 +765,183 @@ export default function SignupPage() {
     const { name, value, type, checked } = e.target;
     setForm((p) => ({ ...p, [name]: type === "checkbox" ? checked : value }));
     if (errors[name]) setErrors((p) => ({ ...p, [name]: "" }));
+    if (name === "email") setEmailOtp(blankOtpState);
     setFormError("");
+  };
+
+  const getOtpConfig = (kind) => {
+    return {
+      type: "email",
+      identifier: normalizeEmail(form.email),
+      state: emailOtp,
+      setState: setEmailOtp,
+      refs: emailOtpRefs,
+      validate: () => {
+        const email = normalizeEmail(form.email);
+        if (!email) {
+          setErrors((current) => ({ ...current, email: "Email is required" }));
+          return false;
+        }
+        if (!isValidEmail(email)) {
+          setErrors((current) => ({ ...current, email: "Enter a valid email address (example: name@gmail.com)" }));
+          return false;
+        }
+        return true;
+      },
+    };
+  };
+
+  const requestOtp = async (kind) => {
+    const config = getOtpConfig(kind);
+    if (!config.validate()) return;
+
+    setLoading(true);
+    setFormError("");
+    try {
+      const result = await sendOtpApi({
+        identifier: config.identifier,
+        type: config.type,
+      });
+      config.setState({
+        sent: true,
+        verified: false,
+        identifier: config.identifier,
+        expiresAt: result.expiresAt,
+        secondsLeft: 60,
+        cooldown: 60,
+        attempts: 0,
+        digits: ["", "", "", "", "", ""],
+      });
+      setToastMessage(result.message || "OTP sent successfully.");
+      setToastTone("success");
+      window.setTimeout(() => config.refs.current[0]?.focus(), 80);
+    } catch (err) {
+      setFormError(err?.message || "Unable to send OTP.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpChange = (kind, index, value) => {
+    const config = getOtpConfig(kind);
+    const digit = value.replace(/\D/g, "").slice(-1);
+    config.setState((current) => {
+      const nextDigits = [...current.digits];
+      nextDigits[index] = digit;
+      return { ...current, digits: nextDigits, verified: false };
+    });
+    setFormError("");
+    if (digit && index < 5) config.refs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (kind, index, event) => {
+    const config = getOtpConfig(kind);
+    if (event.key === "Backspace" && !config.state.digits[index] && index > 0) {
+      config.refs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (kind, event) => {
+    const config = getOtpConfig(kind);
+    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    event.preventDefault();
+    const next = ["", "", "", "", "", ""];
+    pasted.split("").forEach((digit, index) => {
+      next[index] = digit;
+    });
+    config.setState((current) => ({ ...current, digits: next }));
+    config.refs.current[Math.min(pasted.length, 6) - 1]?.focus();
+  };
+
+  const verifyOtp = async (kind) => {
+    const config = getOtpConfig(kind);
+    const code = config.state.digits.join("");
+    if (code.length !== 6 || config.state.secondsLeft <= 0) return;
+    setLoading(true);
+    setFormError("");
+    try {
+      await verifyOtpApi({
+        identifier: config.state.identifier,
+        code,
+      });
+      config.setState((current) => ({ ...current, verified: true, sent: false, digits: ["", "", "", "", "", ""] }));
+      setToastMessage("Email verified successfully.");
+      setToastTone("success");
+    } catch (err) {
+      const nextAttempts = config.state.attempts + 1;
+      config.setState((current) => ({
+        ...current,
+        attempts: nextAttempts,
+        sent: nextAttempts >= 3 ? false : current.sent,
+        digits: ["", "", "", "", "", ""],
+      }));
+      window.setTimeout(() => config.refs.current[0]?.focus(), 80);
+      setFormError(
+        nextAttempts >= 3
+          ? "Too many incorrect OTP attempts. Please request a new code."
+          : err?.message || "OTP verification failed."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderOtpControl = (kind) => {
+    const config = getOtpConfig(kind);
+    const label = "Email";
+    const canVerify = config.state.digits.join("").length === 6 && config.state.secondsLeft > 0 && !loading;
+
+    if (config.state.verified) {
+      return (
+        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-black text-emerald-800">
+          {label} verified
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-2 space-y-2">
+        {config.state.sent ? (
+          <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Enter {label} OTP
+              </span>
+              <span className={["text-[11px] font-bold", config.state.secondsLeft > 0 ? "text-slate-500" : "text-red-600"].join(" ")}>
+                {config.state.secondsLeft > 0 ? formatSeconds(config.state.secondsLeft) : "Expired"}
+              </span>
+            </div>
+            <div className="grid grid-cols-6 gap-2" onPaste={(event) => handleOtpPaste(kind, event)}>
+              {config.state.digits.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={(node) => {
+                    config.refs.current[index] = node;
+                  }}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(event) => handleOtpChange(kind, index, event.target.value)}
+                  onKeyDown={(event) => handleOtpKeyDown(kind, index, event)}
+                  className="h-10 rounded-xl border border-slate-200 bg-slate-50 text-center text-base font-black text-[#004d3d] outline-none transition focus:border-[#004d3d] focus:ring-4 focus:ring-[#004d3d]/5"
+                  aria-label={`${label} OTP digit ${index + 1}`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={!canVerify}
+              onClick={() => verifyOtp(kind)}
+              className="mt-3 h-10 w-full rounded-xl bg-[#004d3d] text-[12px] font-black text-white transition hover:bg-[#00392d] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Verify OTP
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
   };
 
   const handleSubmit = async (e) => {
@@ -696,6 +956,11 @@ export default function SignupPage() {
     const errs = validate();
     if (Object.keys(errs).length) {
       setErrors(errs);
+      return;
+    }
+
+    if (ENABLE_EMAIL_OTP && !emailOtp.verified) {
+      setFormError("Please verify your email address before creating your account.");
       return;
     }
 
@@ -721,75 +986,35 @@ export default function SignupPage() {
   return (
     <>
       <GlobalStyles />
-      <div className="w-full min-h-dvh lg:h-dvh flex flex-col lg:flex-row bg-white lg:overflow-hidden">
+      <div className="auth-shell flex min-h-dvh w-full">
         {/* ── LEFT PANEL (Desktop Only) ── */}
-        <div className="hidden lg:flex lg:w-[45%] xl:w-[50%] relative flex-col justify-center p-12 overflow-hidden flex-shrink-0 h-full">
+        <div className="hidden">
           <div className="absolute inset-0 z-0">
-            <img src={loginImage} alt="" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-tr from-[#0f2d1f]/95 via-[#0f2d1f]/85 to-[#0f2d1f]/40" />
           </div>
-          
           <div className="absolute top-10 left-12 z-10"><Logo /></div>
-
-          <div className="relative z-10 space-y-10">
-            <div>
-              <h2 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-3 tracking-tight">
-                Start your <span className="text-emerald-400">learning</span> <br />{" "}
-                journey today.
-              </h2>
-              <p className="text-emerald-100/70 text-base max-w-md font-medium">
-                Access the tools you need to build what's next.
-              </p>
-            </div>
-            
-            <div className="border-t border-white/10 pt-6 flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-white text-xl font-bold">1K+</span>
-                <span className="text-emerald-300/60 text-[10px] uppercase font-bold tracking-widest mt-0.5">
-                  Courses
-                </span>
-              </div>
-              <div className="w-px h-8 bg-white/10" />
-              <div className="flex items-center gap-2">
-                <span className="text-white text-xl font-bold">98%</span>
-                <span className="text-emerald-300/60 text-[10px] uppercase font-bold tracking-widest mt-0.5">
-                  Satisfaction
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* ── RIGHT PANEL (Mobile Friendly) ── */}
-        <div className="flex-1 flex flex-col min-h-0 h-full bg-white">
-          <div className="flex-1 min-h-0 flex flex-col justify-start px-4 sm:px-10 lg:px-16 xl:px-24 overflow-y-visible lg:overflow-y-auto no-scrollbar pt-5 pb-10 sm:py-8 lg:py-12 bg-white">
-            <div className="w-full max-w-md mx-auto">
-              <div className="lg:hidden flex justify-center mb-5">
-                <Logo dark />
+        <div className="flex min-h-0 flex-1 flex-col bg-transparent">
+          <div className="relative z-10 flex min-h-dvh flex-1 flex-col justify-start px-4 py-6 sm:px-6 lg:px-8 xl:py-10">
+            <div className="auth-card w-full max-w-[640px] mx-auto rounded-[28px] p-5 sm:p-7">
+              <div className="auth-content">
+              
+              <div className="flex justify-center mb-5">
+                <div className="auth-mark rounded-full bg-white p-2 ring-1 ring-[#004d3d]/10">
+                  <Logo dark />
+                </div>
               </div>
-              <div className="anim-1 mb-4">
-                <h1 className="text-xl lg:text-2xl font-extrabold text-[#004d3d] mb-0.5">
-                  Create Account
-                </h1>
-                <p className="text-slate-500 text-[11px] uppercase tracking-wider font-bold leading-snug hidden sm:block">
-                  Step into your portal.
-                </p>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex border-b border-slate-200 mb-4 anim-2">
-                <Link
-                  to="/login"
-                  className="flex-1 pb-1.5 text-center text-[12px] font-medium text-slate-400"
-                >
-                  Login
-                </Link>
-                <Link
-                  to="/signup"
-                  className="flex-1 pb-1.5 text-center text-[12px] font-bold text-[#004d3d] border-b-2 border-[#004d3d]"
-                >
+              
+              <div className="anim-1 mb-5 text-center">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-[#54d410]">LurnStack Sign Up</p>
+                <h1 className="text-2xl lg:text-3xl font-black text-[#004d3d] mb-1">
                   Sign Up
-                </Link>
+                </h1>
+                <p className="text-slate-500 text-[12px] font-semibold leading-relaxed">
+                  Enter your details and verify your email to start learning.
+                </p>
               </div>
 
               <form onSubmit={handleSubmit} noValidate className="space-y-3.5 anim-3">
@@ -833,25 +1058,38 @@ export default function SignupPage() {
                   >
                     Email Address
                   </label>
-                  <input
-                    id="signup-email"
-                    type="email"
-                    name="email"
-                    placeholder="Enter email address"
-                    value={form.email}
-                    onChange={handleChange}
-                    className={`w-full h-11 px-4 rounded-xl bg-slate-50 border text-[13px] outline-none transition-all
-                      ${
-                        errors.email
-                          ? "border-red-400"
-                          : "border-slate-200 focus:border-[#004d3d] focus:ring-4 focus:ring-[#004d3d]/5"
-                      }`}
-                  />
+                  <div className="grid grid-cols-1 gap-2 min-[520px]:grid-cols-[1fr_auto]">
+                    <input
+                      id="signup-email"
+                      type="email"
+                      name="email"
+                      placeholder="Enter email address"
+                      value={form.email}
+                      onChange={handleChange}
+                      className={`min-w-0 h-11 px-4 rounded-xl bg-slate-50 border text-[13px] outline-none transition-all
+                        ${
+                          errors.email
+                            ? "border-red-400"
+                            : "border-slate-200 focus:border-[#004d3d] focus:ring-4 focus:ring-[#004d3d]/5"
+                        }`}
+                    />
+                    {ENABLE_EMAIL_OTP && !emailOtp.verified && form.email.trim() ? (
+                      <button
+                        type="button"
+                        disabled={loading || emailOtp.cooldown > 0}
+                        onClick={() => requestOtp("email")}
+                        className="h-9 self-center rounded-full border border-[#004d3d]/20 bg-white px-3 text-[11px] font-black text-[#004d3d] shadow-sm transition hover:border-[#54d410]/50 hover:bg-[#54d410]/10 disabled:cursor-not-allowed disabled:text-slate-300"
+                      >
+                        {emailOtp.cooldown > 0 ? `${emailOtp.cooldown}s` : emailOtp.sent ? "Resend" : "Verify"}
+                      </button>
+                    ) : null}
+                  </div>
                   {errors.email ? (
                     <div className="mt-1 ml-1 text-[10px] font-semibold text-red-600">
                       {errors.email}
                     </div>
                   ) : null}
+                  {ENABLE_EMAIL_OTP ? renderOtpControl("email") : null}
                 </div>
 
                 <div>
@@ -986,7 +1224,7 @@ export default function SignupPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full h-11 rounded-xl bg-[#004d3d] hover:bg-[#00392d] active:scale-[0.98] text-white font-bold text-[13px] transition-all shadow-lg flex items-center justify-center gap-2 mt-1"
+                  className="w-full h-11 rounded-xl bg-[#004d3d] hover:bg-[#00392d] active:scale-[0.98] text-white font-bold text-[13px] transition-all shadow-[0_16px_36px_rgba(0,77,61,0.22)] flex items-center justify-center gap-2 mt-1"
                 >
                   {loading ? (
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1009,8 +1247,9 @@ export default function SignupPage() {
           </div>
         </div>
       </div>
+    </div>
 
-      <PolicyModal
+    <PolicyModal
         type={activeModal}
         onClose={() => setActiveModal(null)}
         onAccept={handleAcceptPolicy}

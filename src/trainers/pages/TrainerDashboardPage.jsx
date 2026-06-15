@@ -279,6 +279,11 @@ export default function TrainerDashboardPage() {
         recurrenceType: details.recurrenceType || "daily",
         trainerInstructions: details.trainerInstructions || "",
         recurringDays: details.recurringDays || [],
+        recurringDays: details.recurringDays
+          ? (typeof details.recurringDays === "string"
+              ? JSON.parse(details.recurringDays)
+              : details.recurringDays)
+          : [],
         enableWhatsApp: details.enableWhatsApp !== false,
         whatsappTemplateName: details.whatsappTemplateName || "",
         whatsappCustomTitle: details.whatsappCustomTitle || "",

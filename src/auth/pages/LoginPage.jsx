@@ -1,10 +1,10 @@
-import React, { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
-import loginImage from "../../assets/Images/Signup.jpeg";
+import React, { useState, useEffect } from "react";
+import { Link, Navigate, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import brandLogo from "../../assets/Logo/Logo3.png";
 import { useAuth } from "../model/AuthContext";
 import { PATHS } from "../../app/router/paths";
 import { isValidEmail, normalizeEmail, passwordPolicyText } from "../lib/validation";
+import { env } from "../../shared/config/env";
 
 
 const EyeIcon = ({ open }) =>
@@ -61,22 +61,116 @@ const GlobalStyles = () => (
     
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .auth-shell {
+      position: relative;
+      isolation: isolate;
+      background:
+        radial-gradient(circle at 16% 10%, rgba(84, 212, 16, 0.24), transparent 28%),
+        radial-gradient(circle at 90% 18%, rgba(0, 77, 61, 0.13), transparent 34%),
+        linear-gradient(135deg, #f7fff3 0%, #ffffff 46%, #f2fbf6 100%);
+    }
+    .auth-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0, 77, 61, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 77, 61, 0.045) 1px, transparent 1px);
+      background-size: 46px 46px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.78), transparent 78%);
+    }
+    .auth-card {
+      position: relative;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.12);
+      backdrop-filter: blur(14px);
+    }
+    .auth-card::before {
+      content: none;
+    }
+    .auth-content { position: relative; z-index: 1; }
+    .auth-mark { box-shadow: 0 18px 38px rgba(84, 212, 16, 0.2); }
   `}</style>
 );
 
 export default function LoginPage() {
-  const { signIn, isAuthenticated, userRole } = useAuth();
+  const { signIn, signInWithToken, isAuthenticated, userRole } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+
   const [form, setForm] = useState({ email: "", password: "", remember: false });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const [externalAuthLoading, setExternalAuthLoading] = useState(false);
+  const [externalAuthError, setExternalAuthError] = useState("");
+
+  const externalToken = searchParams.get("token") || "";
+  const externalError = searchParams.get("error") || "";
+
+  const redirectTo = (() => {
+    const from = location?.state?.from;
+    const redirect = searchParams.get("redirect");
+    const target =
+      typeof from === "string" && from.trim()
+        ? from
+        : typeof redirect === "string" && redirect.trim()
+          ? redirect
+          : "";
+    if (target && target !== PATHS.TRAINER_DASHBOARD && target !== PATHS.LOGIN) return target;
+    return PATHS.TRAINER_DASHBOARD;
+  })();
+
+  const googleRedirectTo = redirectTo === PATHS.LOGIN ? PATHS.TRAINER_DASHBOARD : redirectTo;
+
+  useEffect(() => {
+    if (!externalToken && !externalError) return undefined;
+    if (externalError) {
+      setExternalAuthError(decodeURIComponent(externalError));
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return undefined;
+    }
+    if (isAuthenticated) return undefined;
+    let active = true;
+
+    const completeGoogleLogin = async () => {
+      setExternalAuthError("");
+      setExternalAuthLoading(true);
+      try {
+        await signInWithToken({ token: externalToken, remember: true });
+        if (active) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          navigate(googleRedirectTo, { replace: true });
+        }
+      } catch (err) {
+        if (active) {
+          setExternalAuthError(err?.message || "Unable to sign in with Google.");
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      } finally {
+        if (active) {
+          setExternalAuthLoading(false);
+        }
+      }
+    };
+
+    completeGoogleLogin();
+
+    return () => {
+      active = false;
+    };
+  }, [externalError, externalToken, googleRedirectTo, isAuthenticated, navigate, signInWithToken]);
 
   if (isAuthenticated) {
     return (
       <Navigate
-        to={userRole === "trainer" ? PATHS.TRAINER_DASHBOARD : PATHS.LOGIN}
+        to={userRole === "trainer" ? (externalToken ? googleRedirectTo : redirectTo) : PATHS.LOGIN}
         replace
       />
     );
@@ -122,52 +216,68 @@ export default function LoginPage() {
     }
   };
 
+  const handleGoogleLogin = () => {
+    if (typeof window === "undefined") return;
+    setFormError("");
+    setExternalAuthError("");
+    setSocialLoading(true);
+
+    const loginUrl = new URL(PATHS.LOGIN, window.location.origin);
+    loginUrl.searchParams.set("role", "trainer");
+    if (redirectTo && redirectTo !== PATHS.TRAINER_DASHBOARD) {
+      loginUrl.searchParams.set("redirect", redirectTo);
+    }
+    const configuredBaseUrl = String(env.apiBaseUrl || "").replace(/\/+$/, "");
+    const baseUrl = configuredBaseUrl || "https://api.lurnstack.com";
+    const redirectToLogin = loginUrl.toString();
+    const authUrl = `${baseUrl}/api/auth/google?redirect=${encodeURIComponent(redirectToLogin)}`;
+
+    window.location.assign(authUrl);
+  };
+
   return (
     <>
       <GlobalStyles />
-      <div className="w-full min-h-dvh lg:h-dvh flex flex-col lg:flex-row bg-white lg:overflow-hidden">
+      <div className="auth-shell flex min-h-dvh w-full">
 
         {/* ── LEFT PANEL (Desktop Only) ── */}
-        <div className="hidden lg:flex lg:w-[45%] xl:w-[50%] relative flex-col justify-center p-12 overflow-hidden flex-shrink-0 h-full">
+        <div className="hidden">
           <div className="absolute inset-0 z-0">
-            <img src={loginImage} alt="" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-br from-[#0f2d1f]/95 via-[#0f2d1f]/85 to-transparent" />
           </div>
-          
           <div className="absolute top-10 left-12 z-10"><Logo /></div>
-          
-          <div className="relative z-10 space-y-10">
-            <div>
-              <h2 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-3 tracking-tight">
-                Master your craft <br /> with <span className="text-emerald-400">structured</span> learning.
-              </h2>
-              <p className="text-emerald-100/70 text-base max-w-md font-medium">Join 50,000+ professionals.</p>
-            </div>
-            
-            <div className="border-t border-white/10 pt-6 flex items-center gap-10">
-              <div className="flex flex-col"><span className="text-white text-xl font-bold">50K+</span><span className="text-emerald-300/60 text-[10px] uppercase font-bold mt-0.5 tracking-wider">Learners</span></div>
-              <div className="flex flex-col"><span className="text-white text-xl font-bold">500+</span><span className="text-emerald-300/60 text-[10px] uppercase font-bold mt-0.5 tracking-wider">Courses</span></div>
-            </div>
-          </div>
         </div>
 
         {/* ── RIGHT PANEL (Mobile Friendly) ── */}
-        <div className="flex-1 flex flex-col min-h-0 h-full bg-white">
-          <div className="flex-1 min-h-0 flex flex-col justify-start px-4 sm:px-10 lg:px-16 xl:px-24 overflow-y-visible lg:overflow-y-auto no-scrollbar pt-5 pb-10 sm:py-8 lg:py-12 bg-white">
-            <div className="w-full max-w-md mx-auto">
-              <div className="lg:hidden flex justify-center mb-5">
-                <Logo dark />
+        <div className="flex min-h-0 flex-1 flex-col bg-transparent">
+          <div className="relative z-10 flex min-h-dvh flex-1 flex-col justify-center px-4 py-8 sm:px-6 lg:px-8">
+            <div className="auth-card w-full max-w-[480px] mx-auto rounded-[28px] p-5 sm:p-7">
+              <div className="auth-content">
+              {externalAuthLoading ? (
+                <div className="rounded-2xl border border-slate-100 bg-white/90 px-4 py-5 shadow-sm mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-4 h-4 border-2 border-[#004d3d]/20 border-t-[#004d3d] rounded-full animate-spin" />
+                    <p className="text-[12px] font-semibold text-slate-600">
+                      Completing Google sign-in...
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              {externalAuthError ? (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[12px] font-semibold text-red-700">
+                  {externalAuthError}
+                </div>
+              ) : null}
+              <div className="flex justify-center mb-5">
+                <div className="auth-mark rounded-full bg-white p-2 ring-1 ring-[#004d3d]/10">
+                  <Logo dark />
+                </div>
               </div>
               
-              <div className="anim-1 mb-4">
-                <h1 className="text-xl lg:text-2xl font-extrabold text-[#004d3d] mb-0.5">Welcome back</h1>
-                <p className="text-slate-500 text-[11px] uppercase tracking-wider font-bold leading-snug">Please enter your details to continue.</p>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex border-b border-slate-200 mb-4 anim-2">
-                <Link to="/login" className="flex-1 pb-1.5 text-center text-[12px] font-bold text-[#004d3d] border-b-2 border-[#004d3d]">Login</Link>
-                <Link to="/signup" className="flex-1 pb-1.5 text-center text-[12px] font-medium text-slate-400 hover:text-slate-600 transition-colors">Sign Up</Link>
+              <div className="anim-1 mb-5 text-center">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-[#54d410]">LurnStack Sign In</p>
+                <h1 className="text-2xl lg:text-3xl font-black text-[#004d3d] mb-1">Sign In</h1>
+                <p className="text-slate-500 text-[12px] font-semibold leading-relaxed">Please enter your details to continue.</p>
               </div>
 
               <form onSubmit={handleSubmit} noValidate className="space-y-3.5 anim-3">
@@ -221,8 +331,8 @@ export default function LoginPage() {
                   <Link to="/forgot-password" title="Forgot password?" className="text-[11px] font-bold text-[#004d3d] hover:underline">Forgot password?</Link>
                 </div>
 
-                <button type="submit" disabled={loading}
-                  className="w-full h-11 rounded-xl bg-[#004d3d] hover:bg-[#00392d] active:scale-[0.98] text-white font-bold text-[13px] transition-all shadow-lg flex items-center justify-center gap-2 mt-1">
+                <button type="submit" disabled={loading || externalAuthLoading}
+                  className="w-full h-11 rounded-xl bg-[#004d3d] hover:bg-[#00392d] active:scale-[0.98] text-white font-bold text-[13px] transition-all shadow-[0_16px_36px_rgba(0,77,61,0.22)] flex items-center justify-center gap-2 mt-1">
                   {loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Sign In"}
                 </button>
               </form>
@@ -233,16 +343,36 @@ export default function LoginPage() {
               </div>
 
               <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-3 anim-3">
-                <button type="button" className="h-9 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold transition-all shadow-sm">
+                <button
+                  type="button"
+                  disabled={loading || socialLoading || externalAuthLoading}
+                  onClick={handleGoogleLogin}
+                  className="h-9 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-[11px] font-bold transition-all shadow-sm"
+                >
                   <GoogleIcon />
-                  <span>Google</span>
+                  <span>{socialLoading ? "Opening..." : "Google"}</span>
                 </button>
-                <button type="button" className="h-9 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold transition-all shadow-sm">
+                <button
+                  type="button"
+                  disabled={loading || socialLoading || externalAuthLoading}
+                  className="h-9 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-[11px] font-bold transition-all shadow-sm"
+                >
                   <FacebookIcon />
                   <span>Facebook</span>
                 </button>
               </div>
 
+              <p className="mt-5 text-center text-[12px] text-slate-500">
+                New to LurnStack?{" "}
+                <Link
+                  to="/signup"
+                  className="font-black text-[#004d3d] hover:underline transition-colors"
+                >
+                  Sign up
+                </Link>
+              </p>
+
+              </div>
             </div>
           </div>
         </div>

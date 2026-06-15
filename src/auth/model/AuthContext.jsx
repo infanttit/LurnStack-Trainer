@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   authenticateTrainer,
+  authenticateWithToken,
   authenticateUser,
   getCurrentUser,
   logoutUser,
@@ -48,6 +49,11 @@ export function AuthProvider({ children }) {
           setUser(null);
           throw err;
         }
+      },
+      signInWithToken: async ({ token, remember = true }) => {
+        const next = await authenticateWithToken({ token, persist: !!remember });
+        setUser(next || null);
+        return next || null;
       },
       signOut: async () => {
         logoutUser();
