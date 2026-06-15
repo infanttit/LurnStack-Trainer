@@ -13,6 +13,12 @@ export const initialSessionForm = {
   thumbnailFile: null,
   isRecurring: true,
   recurrenceType: "daily",
+  trainerInstructions: "",
+  recurringDays: [],
+  enableWhatsApp: true,
+  whatsappTemplateName: "",
+  whatsappCustomTitle: "",
+  whatsappButtonUrl: "",
 };
 
 export const sessionFieldLabels = {

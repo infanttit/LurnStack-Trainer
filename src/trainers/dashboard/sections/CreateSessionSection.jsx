@@ -225,6 +225,117 @@ export default function CreateSessionSection({
           {formErrors.meetingLink ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.meetingLink}</p> : null}
         </label>
 
+        <label className="sm:col-span-2">
+          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Trainer instructions / Schedule Notes</span>
+          <textarea
+            name="trainerInstructions"
+            value={form.trainerInstructions || ""}
+            onChange={onChange}
+            rows={2}
+            placeholder="e.g. Classes will be conducted only from Monday to Thursday"
+            className={fieldClass("trainerInstructions", "mt-1 w-full resize-none rounded-xl px-4 py-3 text-sm outline-none")}
+          />
+        </label>
+
+        <div className="sm:col-span-2">
+          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Recurring Days of the Week</span>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {[
+              { label: 'S', value: 0 },
+              { label: 'M', value: 1 },
+              { label: 'T', value: 2 },
+              { label: 'W', value: 3 },
+              { label: 'T', value: 4 },
+              { label: 'F', value: 5 },
+              { label: 'S', value: 6 }
+            ].map((day) => {
+              const isChecked = (form.recurringDays || []).includes(day.value);
+              return (
+                <label
+                  key={day.value}
+                  className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border text-sm font-extrabold transition-all duration-200 ${
+                    isChecked
+                      ? 'border-[#00342b] bg-[#00342b] text-white shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      const currentDays = form.recurringDays || [];
+                      const newDays = checked
+                        ? [...currentDays, day.value]
+                        : currentDays.filter((d) => d !== day.value);
+                      onChange({
+                        target: {
+                          name: 'recurringDays',
+                          value: newDays.sort(),
+                          type: 'custom'
+                        }
+                      });
+                    }}
+                  />
+                  {day.label}
+                </label>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Select specific days (e.g., Monday to Thursday) to restrict this recurring session. Leave all unchecked to run every day.
+          </p>
+        </div>
+
+        <div className="sm:col-span-2 border-t border-slate-100 pt-4 mt-2">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              name="enableWhatsApp"
+              type="checkbox"
+              checked={form.enableWhatsApp !== false}
+              onChange={onChange}
+              className="h-5 w-5 rounded border-slate-300 text-[#00342b] focus:ring-[#00342b]"
+            />
+            <span className="text-sm font-extrabold text-slate-700">Enable WhatsApp Reminders</span>
+          </label>
+        </div>
+
+        {form.enableWhatsApp !== false ? (
+          <div className="sm:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-3 pl-4 border-l-2 border-[#00342b]/20 mt-1">
+            <label>
+              <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Custom Template Name (Optional)</span>
+              <input
+                name="whatsappTemplateName"
+                value={form.whatsappTemplateName || ""}
+                onChange={onChange}
+                placeholder="e.g. session_reminder_alt"
+                className={fieldClass("whatsappTemplateName", "mt-1 h-11 w-full rounded-xl px-4 text-xs outline-none")}
+              />
+            </label>
+            <label>
+              <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Custom Msg Title (Optional)</span>
+              <input
+                name="whatsappCustomTitle"
+                value={form.whatsappCustomTitle || ""}
+                onChange={onChange}
+                placeholder="e.g. Special Live Workshop"
+                className={fieldClass("whatsappCustomTitle", "mt-1 h-11 w-full rounded-xl px-4 text-xs outline-none")}
+              />
+            </label>
+            <label>
+              <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Custom Button Link (Optional)</span>
+              <input
+                name="whatsappButtonUrl"
+                value={form.whatsappButtonUrl || ""}
+                onChange={onChange}
+                placeholder="e.g. react-hooks-live"
+                className={fieldClass("whatsappButtonUrl", "mt-1 h-11 w-full rounded-xl px-4 text-xs outline-none")}
+              />
+            </label>
+          </div>
+        ) : null}
+
         <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-extrabold text-emerald-950">
           Recurrence: Daily, {form.startTime && form.endTime ? `${formatTime(form.startTime)} to ${formatTime(form.endTime)}` : "time not set"}
         </div>
