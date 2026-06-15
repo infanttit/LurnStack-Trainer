@@ -133,6 +133,12 @@ function normalizeSession(dto) {
     trainerEmail: raw.trainerEmail || "",
     createdAt: raw.createdAt || "",
     updatedAt: raw.updatedAt || "",
+    trainerInstructions: raw.trainerInstructions || "",
+    recurringDays: raw.recurringDays || null,
+    enableWhatsApp: raw.enableWhatsApp ?? true,
+    whatsappTemplateName: raw.whatsappTemplateName || "",
+    whatsappCustomTitle: raw.whatsappCustomTitle || "",
+    whatsappButtonUrl: raw.whatsappButtonUrl || "",
     raw,
   };
 }
@@ -151,6 +157,12 @@ function normalizeSessionPayload(payload) {
     meetingLink: String(payload.meetingLink || "").trim(),
     isRecurring: payload.isRecurring !== false,
     recurrenceType: payload.recurrenceType || "daily",
+    trainerInstructions: String(payload.trainerInstructions || "").trim(),
+    recurringDays: payload.recurringDays ? (typeof payload.recurringDays === 'string' ? payload.recurringDays : JSON.stringify(payload.recurringDays)) : null,
+    enableWhatsApp: payload.enableWhatsApp !== false,
+    whatsappTemplateName: String(payload.whatsappTemplateName || "").trim() || null,
+    whatsappCustomTitle: String(payload.whatsappCustomTitle || "").trim() || null,
+    whatsappButtonUrl: String(payload.whatsappButtonUrl || "").trim() || null,
   };
 
   if (courseId) {
