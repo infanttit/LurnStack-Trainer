@@ -183,6 +183,9 @@ export default function TrainerDashboardPage() {
       nextErrors.startTime = "Choose a valid start time.";
       nextErrors.endTime = "End time must be after start time.";
     }
+    if (form.isRecurring && (!form.recurringDays || form.recurringDays.length === 0)) {
+      nextErrors.recurringDays = "Please select at least one recurring day.";
+    }
     setFormErrors(nextErrors);
     return nextErrors;
   };
@@ -275,6 +278,7 @@ export default function TrainerDashboardPage() {
         isRecurring: details.isRecurring !== false,
         recurrenceType: details.recurrenceType || "daily",
         trainerInstructions: details.trainerInstructions || "",
+        recurringDays: details.recurringDays || [],
         recurringDays: details.recurringDays
           ? (typeof details.recurringDays === "string"
               ? JSON.parse(details.recurringDays)

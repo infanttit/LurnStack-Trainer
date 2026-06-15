@@ -12,6 +12,7 @@ export const initialSessionForm = {
   thumbnailPreview: "",
   thumbnailFile: null,
   isRecurring: true,
+  recurrenceType: "weekly",
   recurrenceType: "daily",
   trainerInstructions: "",
   recurringDays: [],

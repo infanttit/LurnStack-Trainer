@@ -78,6 +78,23 @@ function normalizeSession(dto) {
     raw.todaysCancellation ||
     null;
 
+  let recurringDays = [];
+  if (Array.isArray(raw.recurringDays)) {
+    recurringDays = raw.recurringDays.map(Number);
+  } else if (typeof raw.recurringDays === "string") {
+    try {
+      const parsed = JSON.parse(raw.recurringDays);
+      if (Array.isArray(parsed)) {
+        recurringDays = parsed.map(Number);
+      }
+    } catch {
+      recurringDays = raw.recurringDays
+        .split(",")
+        .map(Number)
+        .filter((n) => !isNaN(n));
+    }
+  }
+
   return {
     id: String(raw.id || raw._id || raw.sessionId || ""),
     courseId: String(raw.courseId || raw.course?._id || raw.course?.id || ""),
@@ -99,6 +116,12 @@ function normalizeSession(dto) {
     thumbnail: toAbsoluteAssetUrl(raw.thumbnail || raw.thumbnailUrl || raw.image || ""),
     isRecurring: raw.isRecurring !== false,
     recurrenceType: raw.recurrenceType || "daily",
+    trainerInstructions: raw.trainerInstructions || "",
+    recurringDays,
+    enableWhatsApp: raw.enableWhatsApp !== false,
+    whatsappTemplateName: raw.whatsappTemplateName || "",
+    whatsappCustomTitle: raw.whatsappCustomTitle || "",
+    whatsappButtonUrl: raw.whatsappButtonUrl || "",
     status,
     isPaused: Boolean(raw.isPaused) || status === "paused",
     isEnded: Boolean(raw.isEnded) || status === "ended",
@@ -158,6 +181,11 @@ function normalizeSessionPayload(payload) {
     isRecurring: payload.isRecurring !== false,
     recurrenceType: payload.recurrenceType || "daily",
     trainerInstructions: String(payload.trainerInstructions || "").trim(),
+    recurringDays: Array.isArray(payload.recurringDays) ? payload.recurringDays : [],
+    enableWhatsApp: payload.enableWhatsApp !== false,
+    whatsappTemplateName: String(payload.whatsappTemplateName || "").trim(),
+    whatsappCustomTitle: String(payload.whatsappCustomTitle || "").trim(),
+    whatsappButtonUrl: String(payload.whatsappButtonUrl || "").trim(),
     recurringDays: payload.recurringDays ? (typeof payload.recurringDays === 'string' ? payload.recurringDays : JSON.stringify(payload.recurringDays)) : null,
     enableWhatsApp: payload.enableWhatsApp !== false,
     whatsappTemplateName: String(payload.whatsappTemplateName || "").trim() || null,
@@ -176,7 +204,11 @@ function normalizeSessionPayload(payload) {
 
   const formData = new FormData();
   Object.entries(data).forEach(([key, value]) => {
-    formData.append(key, value);
+    if (Array.isArray(value)) {
+      value.forEach((v) => formData.append(key, v));
+    } else {
+      formData.append(key, value);
+    }
   });
   formData.append("thumbnail", payload.thumbnailFile);
   return formData;
