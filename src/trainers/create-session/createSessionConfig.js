@@ -13,13 +13,13 @@ export const initialSessionForm = {
   thumbnailFile: null,
   isRecurring: true,
   recurrenceType: "weekly",
-  recurrenceType: "daily",
   trainerInstructions: "",
   recurringDays: [],
   enableWhatsApp: true,
   whatsappTemplateName: "",
   whatsappCustomTitle: "",
   whatsappButtonUrl: "",
+  recurrenceEndDate: "",
 };
 
 export const sessionFieldLabels = {
@@ -29,6 +29,7 @@ export const sessionFieldLabels = {
   startTime: "Start time",
   endTime: "End time",
   meetingLink: "Meeting link",
+  recurrenceEndDate: "Recurrence End Date",
 };
 
 export const categorySuggestions = [

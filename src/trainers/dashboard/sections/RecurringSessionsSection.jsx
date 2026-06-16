@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   FiAlertCircle,
   FiCalendar,
@@ -12,6 +13,8 @@ import {
   FiStopCircle,
   FiTrash2,
   FiXCircle,
+  FiChevronDown,
+  FiChevronUp,
 } from "react-icons/fi";
 import { PATHS } from "../../../app/router/paths";
 import {
@@ -76,38 +79,52 @@ export default function RecurringSessionsSection({
         </div>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-1 justify-items-center gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      <div className="mt-6">
         {loadingSessions ? (
-          <div className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-8 text-center md:col-span-2 xl:col-span-3 2xl:col-span-4">
+          <div className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-8 text-center">
             <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#00342b]" />
             <div className="mt-3 text-lg font-extrabold">Loading recurring sessions</div>
             <p className="mt-1 text-sm text-slate-500">Fetching your daily live session setup.</p>
           </div>
         ) : sessions.length === 0 ? (
-          <div className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-8 text-center md:col-span-2 xl:col-span-3 2xl:col-span-4">
+          <div className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-8 text-center">
             <FiCalendar className="mx-auto text-4xl text-slate-300" />
             <div className="mt-3 text-lg font-extrabold">No recurring sessions yet</div>
             <p className="mt-1 text-sm text-slate-500">Create one daily session and reuse it every day.</p>
           </div>
         ) : (
-          sessions.map((session) => (
-            <SessionCard
-              key={session.id}
-              session={session}
-              trainerActionsLocked={trainerActionsLocked}
-              actionId={actionId}
-              onEditSession={onEditSession}
-              onUpdateSessionAction={onUpdateSessionAction}
-              onOpenSessionDialog={onOpenSessionDialog}
-            />
-          ))
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 font-extrabold whitespace-nowrap">Course & Session</th>
+                  <th className="px-4 py-3 font-extrabold whitespace-nowrap">Schedule</th>
+                  <th className="px-4 py-3 font-extrabold whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3 font-extrabold text-right whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {sessions.map((session) => (
+                  <SessionRow
+                    key={session.id}
+                    session={session}
+                    trainerActionsLocked={trainerActionsLocked}
+                    actionId={actionId}
+                    onEditSession={onEditSession}
+                    onUpdateSessionAction={onUpdateSessionAction}
+                    onOpenSessionDialog={onOpenSessionDialog}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </section>
   );
 }
 
-function SessionCard({
+function SessionRow({
   session,
   trainerActionsLocked,
   actionId,
@@ -115,173 +132,221 @@ function SessionCard({
   onUpdateSessionAction,
   onOpenSessionDialog,
 }) {
+  const [expanded, setExpanded] = useState(false);
   const status = getSessionStatus(session);
   const lockedSession = trainerActionsLocked || session.isEnded || session.status === "ended";
 
-  return (
-    <article className="w-full max-w-[280px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
-      <div className="h-20 bg-slate-100">
-        {session.thumbnail ? (
-          <img src={session.thumbnail} alt={session.title} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-emerald-950 via-teal-800 to-cyan-600 text-white">
-            <FiImage className="text-2xl opacity-80" />
-            <div className="mt-1 text-[10px] font-extrabold">Daily live session</div>
-          </div>
-        )}
-      </div>
+  let remainingDaysText = "";
+  if (session.recurrenceEndDate) {
+    const end = new Date(session.recurrenceEndDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = end.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 0) {
+      remainingDaysText = `${diffDays} days remaining`;
+    } else if (diffDays === 0) {
+      remainingDaysText = "Ends today";
+    } else {
+      remainingDaysText = "Ended";
+    }
+  }
 
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="truncate text-[9px] font-extrabold uppercase tracking-widest text-[#006b58]">
-              {session.courseTitle}
-            </div>
-            <h3 className="mt-1 line-clamp-1 break-words text-sm font-extrabold leading-tight text-slate-950">
-              {session.title}
-            </h3>
+  return (
+    <>
+      <tr 
+        className="hover:bg-slate-50 transition-colors cursor-pointer" 
+        onClick={() => setExpanded(!expanded)}
+      >
+        <td className="px-4 py-3 align-top max-w-xs">
+          <div className="text-[10px] font-extrabold uppercase tracking-widest text-[#006b58] truncate">
+            {session.courseTitle}
           </div>
-          <span className={[
-            "inline-flex shrink-0 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider",
-            getStatusClass(status),
-          ].join(" ")}
+          <div className="font-extrabold text-slate-950 mt-0.5 line-clamp-2">
+            {session.title}
+          </div>
+        </td>
+        <td className="px-4 py-3 align-top">
+          <div className="flex flex-col gap-1.5 text-xs font-semibold">
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <FiClock className="text-[#006b58]" /> 
+              {formatDailyWindow(session)}
+            </span>
+            <span className="flex items-center gap-1.5 whitespace-nowrap text-slate-500">
+              <FiCalendar className="text-[#006b58]" /> 
+              {session.recurrenceType === "daily" ? "Repeats daily" : session.recurrenceType}
+            </span>
+            {session.recurrenceEndDate && (
+              <span className="flex items-center gap-1.5 whitespace-nowrap text-slate-500">
+                <FiCalendar className="text-transparent" />
+                Ends {new Date(session.recurrenceEndDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                <span className="text-amber-600 font-bold ml-0.5">({remainingDaysText})</span>
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="px-4 py-3 align-top">
+          <span
+            className={[
+              "inline-flex shrink-0 whitespace-nowrap rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider",
+              getStatusClass(status),
+            ].join(" ")}
           >
             {status}
           </span>
-        </div>
+        </td>
+        <td className="px-4 py-3 align-top text-right">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-[#006b58] transition-colors whitespace-nowrap"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+          >
+            {expanded ? "Hide Details" : "View Details"}
+            {expanded ? <FiChevronUp /> : <FiChevronDown />}
+          </button>
+        </td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan="4" className="bg-slate-50/50 p-0 border-t-0">
+            <div className="px-4 py-5 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex flex-col gap-5">
+                <div className="w-full max-w-[240px]">
+                  <div className="aspect-[16/9] bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
+                    {session.thumbnail ? (
+                      <img src={session.thumbnail} alt={session.title} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-emerald-950 via-teal-800 to-cyan-600 text-white">
+                        <FiImage className="text-2xl opacity-80" />
+                        <div className="mt-1 text-[10px] font-extrabold">Daily live session</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  {session.subtitle ? (
+                    <p className="font-semibold text-slate-700 text-sm mb-1">{session.subtitle}</p>
+                  ) : null}
+                  <p className="text-sm text-slate-600 leading-relaxed">{session.description}</p>
+                  
+                  <div className="mt-4 flex flex-wrap gap-y-4 gap-x-8">
+                    <div>
+                      <div className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider">Pricing status</div>
+                      {session.priceInPaise === null || session.priceInPaise === undefined ? (
+                        <span className="text-xs font-black uppercase text-amber-700 mt-0.5 block">Awaiting Admin Pricing</span>
+                      ) : (
+                        <div className="text-sm font-extrabold text-slate-950 mt-0.5">{formatPriceInPaise(session.priceInPaise)}</div>
+                      )}
+                    </div>
+                  </div>
 
-        {session.subtitle ? (
-          <p className="mt-0.5 line-clamp-1 break-words text-[10px] font-semibold leading-relaxed text-slate-500">
-            {session.subtitle}
-          </p>
-        ) : null}
-        <p className="mt-1.5 line-clamp-1 break-words text-[10px] leading-relaxed text-slate-500">
-          {session.description}
-        </p>
+                  {session.isTodayCancelled ? (
+                    <div className="mt-4 inline-flex rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                      Today's class is cancelled{session.todayCancellationReason ? `: ${session.todayCancellationReason}` : "."}
+                    </div>
+                  ) : null}
+                  
+                  {session.todayStatus === "completed_today" ? (
+                    <div className="mt-4 inline-flex rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+                      Today's session is completed. This recurring session remains active for tomorrow.
+                    </div>
+                  ) : null}
 
-        <div className="mt-2.5 grid grid-cols-1 gap-1.5 text-[10px] font-semibold text-slate-600">
-          <span className="flex min-h-7 items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1">
-            <FiClock className="flex-shrink-0 text-[#006b58]" />
-            <span className="min-w-0 line-clamp-1 break-words">{formatDailyWindow(session)}</span>
-          </span>
-          <span className="flex min-h-7 items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1">
-            <FiCalendar className="flex-shrink-0 text-[#006b58]" />
-            <span className="min-w-0 break-words">
-              {session.recurrenceType === "daily" ? "Repeats daily" : session.recurrenceType}
-            </span>
-          </span>
-        </div>
-
-        <div className="mt-2 leading-none">
-          <div className="font-extrabold uppercase text-slate-500" style={{ fontSize: "10px", lineHeight: "12px", letterSpacing: "0" }}>
-            Pricing status
-          </div>
-          {session.priceInPaise === null || session.priceInPaise === undefined ? (
-            <span
-              title="Students cannot enroll until the Admin approves and sets a price for this session."
-              className="inline-flex w-fit font-black uppercase text-amber-700"
-              style={{ marginTop: "2px", padding: "0", fontSize: "11px", lineHeight: "13px", letterSpacing: "0" }}
-            >
-              Awaiting Admin Pricing
-            </span>
-          ) : (
-            <div className="mt-px text-[8px] font-extrabold text-slate-950">
-              {formatPriceInPaise(session.priceInPaise)}
+                  <div className="mt-5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={lockedSession || actionId === `edit:${session.id}`}
+                      onClick={() => onEditSession(session)}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-extrabold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm"
+                    >
+                      <FiEdit3 className="text-sm" />
+                      <span>Edit</span>
+                    </button>
+                    
+                    {session.isPaused ? (
+                      <button
+                        type="button"
+                        disabled={lockedSession || actionId === `resume:${session.id}`}
+                        onClick={() => onUpdateSessionAction(session.id, "resume")}
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-3 text-xs font-extrabold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FiPlayCircle className="text-sm" />
+                        <span>Resume</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={lockedSession || actionId === `pause:${session.id}`}
+                        onClick={() => onUpdateSessionAction(session.id, "pause")}
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-amber-50 px-3 text-xs font-extrabold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FiPauseCircle className="text-sm" />
+                        <span>Pause</span>
+                      </button>
+                    )}
+                    
+                    {session.isTodayCancelled ? (
+                      <button
+                        type="button"
+                        disabled={lockedSession || actionId === `restoreToday:${session.id}`}
+                        onClick={() => onUpdateSessionAction(session.id, "restoreToday")}
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-3 text-xs font-extrabold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FiRotateCcw className="text-sm" />
+                        <span>Restore Today</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={lockedSession || actionId === `cancelToday:${session.id}`}
+                        onClick={() => onOpenSessionDialog(session.id, "cancelToday")}
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-red-50 px-3 text-xs font-extrabold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FiXCircle className="text-sm" />
+                        <span>Cancel Today</span>
+                      </button>
+                    )}
+                    
+                    <a
+                      href={session.meetingLink || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-extrabold text-slate-700 transition-colors hover:bg-slate-50 shadow-sm"
+                    >
+                      <span>Join Meet</span>
+                    </a>
+                    
+                    <button
+                      type="button"
+                      disabled={lockedSession || actionId === `end:${session.id}`}
+                      onClick={() => onOpenSessionDialog(session.id, "end")}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-red-600 px-3 text-xs font-extrabold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm ml-auto"
+                    >
+                      <FiStopCircle className="text-sm" />
+                      <span>End</span>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      disabled={trainerActionsLocked || actionId === `delete:${session.id}`}
+                      onClick={() => onOpenSessionDialog(session.id, "delete")}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-red-50 px-3 text-xs font-extrabold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FiTrash2 className="text-sm" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-
-        {session.isTodayCancelled ? (
-          <div className="mt-2.5 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-[10px] font-semibold text-red-700">
-            Today's class is cancelled{session.todayCancellationReason ? `: ${session.todayCancellationReason}` : "."}
-          </div>
-        ) : null}
-        {session.todayStatus === "completed_today" ? (
-          <div className="mt-2.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-semibold text-slate-700">
-            Today's session is completed. This recurring session remains active for tomorrow.
-          </div>
-        ) : null}
-
-        <div className="mt-3 grid grid-cols-2 gap-1.5">
-          <button
-            type="button"
-            disabled={lockedSession || actionId === `edit:${session.id}`}
-            onClick={() => onEditSession(session)}
-            className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg bg-slate-50 px-1.5 text-[10px] font-extrabold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <FiEdit3 className="flex-shrink-0" />
-            <span className="truncate">Edit</span>
-          </button>
-          {session.isPaused ? (
-            <button
-              type="button"
-              disabled={lockedSession || actionId === `resume:${session.id}`}
-              onClick={() => onUpdateSessionAction(session.id, "resume")}
-              className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg bg-emerald-50 px-1.5 text-[10px] font-extrabold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FiPlayCircle className="flex-shrink-0" />
-              <span className="truncate">Resume</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={lockedSession || actionId === `pause:${session.id}`}
-              onClick={() => onUpdateSessionAction(session.id, "pause")}
-              className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg bg-amber-50 px-1.5 text-[10px] font-extrabold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FiPauseCircle className="flex-shrink-0" />
-              <span className="truncate">Pause</span>
-            </button>
-          )}
-          {session.isTodayCancelled ? (
-            <button
-              type="button"
-              disabled={lockedSession || actionId === `restoreToday:${session.id}`}
-              onClick={() => onUpdateSessionAction(session.id, "restoreToday")}
-              className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg bg-emerald-50 px-1.5 text-[10px] font-extrabold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FiRotateCcw className="flex-shrink-0" />
-              <span className="truncate">Restore</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={lockedSession || actionId === `cancelToday:${session.id}`}
-              onClick={() => onOpenSessionDialog(session.id, "cancelToday")}
-              className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg bg-red-50 px-1.5 text-[10px] font-extrabold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FiXCircle className="flex-shrink-0" />
-              <span className="truncate">Cancel today</span>
-            </button>
-          )}
-          <a
-            href={session.meetingLink || "#"}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-8 min-w-0 items-center justify-center rounded-lg bg-slate-50 px-1.5 text-[10px] font-extrabold text-slate-700 transition-colors hover:bg-slate-100"
-          >
-            <span className="truncate">Meet link</span>
-          </a>
-          <button
-            type="button"
-            disabled={lockedSession || actionId === `end:${session.id}`}
-            onClick={() => onOpenSessionDialog(session.id, "end")}
-            className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg bg-red-600 px-1.5 text-[10px] font-extrabold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <FiStopCircle className="flex-shrink-0" />
-            <span className="truncate">End</span>
-          </button>
-          <button
-            type="button"
-            disabled={trainerActionsLocked || actionId === `delete:${session.id}`}
-            onClick={() => onOpenSessionDialog(session.id, "delete")}
-            className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg bg-red-50 px-1.5 text-[10px] font-extrabold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <FiTrash2 className="flex-shrink-0" />
-            <span className="truncate">Delete</span>
-          </button>
-        </div>
-      </div>
-    </article>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
