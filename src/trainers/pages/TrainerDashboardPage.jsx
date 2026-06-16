@@ -183,8 +183,20 @@ export default function TrainerDashboardPage() {
       nextErrors.startTime = "Choose a valid start time.";
       nextErrors.endTime = "End time must be after start time.";
     }
-    if (form.isRecurring && (!form.recurringDays || form.recurringDays.length === 0)) {
-      nextErrors.recurringDays = "Please select at least one recurring day.";
+    if (form.isRecurring) {
+      if (!form.recurringDays || form.recurringDays.length === 0) {
+        nextErrors.recurringDays = "Please select at least one recurring day.";
+      }
+      if (!form.recurrenceEndDate) {
+        nextErrors.recurrenceEndDate = "Recurrence end date is required.";
+      } else {
+        const selectedDate = new Date(form.recurrenceEndDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (selectedDate < today) {
+          nextErrors.recurrenceEndDate = "Recurrence end date cannot be in the past.";
+        }
+      }
     }
     setFormErrors(nextErrors);
     return nextErrors;
@@ -278,12 +290,12 @@ export default function TrainerDashboardPage() {
         isRecurring: details.isRecurring !== false,
         recurrenceType: details.recurrenceType || "daily",
         trainerInstructions: details.trainerInstructions || "",
-        recurringDays: details.recurringDays || [],
         recurringDays: details.recurringDays
           ? (typeof details.recurringDays === "string"
               ? JSON.parse(details.recurringDays)
               : details.recurringDays)
           : [],
+        recurrenceEndDate: details.recurrenceEndDate ? String(details.recurrenceEndDate).substring(0, 10) : "",
         enableWhatsApp: details.enableWhatsApp !== false,
         whatsappTemplateName: details.whatsappTemplateName || "",
         whatsappCustomTitle: details.whatsappCustomTitle || "",

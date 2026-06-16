@@ -240,17 +240,17 @@ export default function CreateSessionSection({
 
         {/* Recurrence Settings Group */}
         <div className="sm:col-span-2 rounded-2xl border border-slate-200 p-4 bg-slate-50">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <label className="flex items-center gap-2 select-none">
             <input
               type="checkbox"
               name="isRecurring"
-              checked={form.isRecurring}
-              onChange={onChange}
-              className="h-5 w-5 rounded border-slate-300 text-[#006b58] focus:ring-[#006b58] focus:ring-2"
+              checked={true}
+              disabled={true}
+              className="h-5 w-5 rounded border-slate-300 text-[#00342b] focus:ring-[#00342b] opacity-80 cursor-not-allowed"
             />
             <div>
-              <span className="text-sm font-extrabold text-slate-800">Weekly Recurring Session</span>
-              <p className="text-xs text-slate-500">Enable this if the class runs on specific days every week.</p>
+              <span className="text-sm font-extrabold text-slate-800">Weekly Recurring Session <span className="text-[#006b58] font-bold">(Mandatory)</span></span>
+              <p className="text-xs text-slate-500">All live classes must run on weekly recurring schedule days.</p>
             </div>
           </label>
 
@@ -313,189 +313,31 @@ export default function CreateSessionSection({
               {formErrors.recurringDays ? (
                 <p className="mt-2 text-xs font-semibold text-red-600">{formErrors.recurringDays}</p>
               ) : null}
-            </div>
-          )}
-        </div>
 
-        {/* WhatsApp Notification Settings Group */}
-        <div className="sm:col-span-2 rounded-2xl border border-slate-200 p-4 bg-slate-50">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              name="enableWhatsApp"
-              checked={form.enableWhatsApp}
-              onChange={onChange}
-              className="h-5 w-5 rounded border-slate-300 text-[#006b58] focus:ring-[#006b58] focus:ring-2"
-            />
-            <div>
-              <span className="text-sm font-extrabold text-slate-800">Enable WhatsApp Reminders</span>
-              <p className="text-xs text-slate-500">Send automatic class link alerts directly to students.</p>
-            </div>
-          </label>
-
-          {form.enableWhatsApp && (
-            <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200/60 pt-4 sm:grid-cols-3">
-              <label>
-                <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">
-                  Meta Template Name
-                </span>
-                <input
-                  name="whatsappTemplateName"
-                  value={form.whatsappTemplateName || ""}
-                  onChange={onChange}
-                  placeholder="e.g., lurnstack_custom"
-                  className={fieldClass("whatsappTemplateName", "mt-1 h-11 w-full rounded-xl px-4 bg-white text-sm outline-none")}
-                />
-                {formErrors.whatsappTemplateName ? (
-                  <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.whatsappTemplateName}</p>
-                ) : null}
-              </label>
-
-              <label>
-                <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">
-                  Custom Title Override
-                </span>
-                <input
-                  name="whatsappCustomTitle"
-                  value={form.whatsappCustomTitle || ""}
-                  onChange={onChange}
-                  placeholder="e.g., React Hooks Session"
-                  className={fieldClass("whatsappCustomTitle", "mt-1 h-11 w-full rounded-xl px-4 bg-white text-sm outline-none")}
-                />
-                {formErrors.whatsappCustomTitle ? (
-                  <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.whatsappCustomTitle}</p>
-                ) : null}
-              </label>
-
-              <label>
-                <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">
-                  Button Redirect Link
-                </span>
-                <input
-                  name="whatsappButtonUrl"
-                  value={form.whatsappButtonUrl || ""}
-                  onChange={onChange}
-                  placeholder="e.g., course-slug"
-                  className={fieldClass("whatsappButtonUrl", "mt-1 h-11 w-full rounded-xl px-4 bg-white text-sm outline-none")}
-                />
-                {formErrors.whatsappButtonUrl ? (
-                  <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.whatsappButtonUrl}</p>
-                ) : null}
-              </label>
-            </div>
-          )}
-        </div>
-
-        <label className="sm:col-span-2">
-          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Trainer instructions / Schedule Notes</span>
-          <textarea
-            name="trainerInstructions"
-            value={form.trainerInstructions || ""}
-            onChange={onChange}
-            rows={2}
-            placeholder="e.g. Classes will be conducted only from Monday to Thursday"
-            className={fieldClass("trainerInstructions", "mt-1 w-full resize-none rounded-xl px-4 py-3 text-sm outline-none")}
-          />
-        </label>
-
-        <div className="sm:col-span-2">
-          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Recurring Days of the Week</span>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {[
-              { label: 'S', value: 0 },
-              { label: 'M', value: 1 },
-              { label: 'T', value: 2 },
-              { label: 'W', value: 3 },
-              { label: 'T', value: 4 },
-              { label: 'F', value: 5 },
-              { label: 'S', value: 6 }
-            ].map((day) => {
-              const isChecked = (form.recurringDays || []).includes(day.value);
-              return (
-                <label
-                  key={day.value}
-                  className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border text-sm font-extrabold transition-all duration-200 ${
-                    isChecked
-                      ? 'border-[#00342b] bg-[#00342b] text-white shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
+              {/* Recurrence End Date Input */}
+              <div className="mt-4 border-t border-slate-200/60 pt-4">
+                <label className="block">
+                  <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500 block mb-1">
+                    Recurrence End Date <span className="text-[#006b58] font-bold">(Required)</span>
+                  </span>
                   <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={isChecked}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      const currentDays = form.recurringDays || [];
-                      const newDays = checked
-                        ? [...currentDays, day.value]
-                        : currentDays.filter((d) => d !== day.value);
-                      onChange({
-                        target: {
-                          name: 'recurringDays',
-                          value: newDays.sort(),
-                          type: 'custom'
-                        }
-                      });
-                    }}
+                    name="recurrenceEndDate"
+                    type="date"
+                    value={form.recurrenceEndDate || ""}
+                    onChange={onChange}
+                    className={fieldClass("recurrenceEndDate", "mt-1 h-11 w-full max-w-xs rounded-xl bg-white px-4 text-sm outline-none")}
                   />
-                  {day.label}
+                  {formErrors.recurrenceEndDate ? (
+                    <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.recurrenceEndDate}</p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-slate-500">
+                    Select a date when this recurring session should stop generating occurrences.
+                  </p>
                 </label>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Select specific days (e.g., Monday to Thursday) to restrict this recurring session. Leave all unchecked to run every day.
-          </p>
+              </div>
+            </div>
+          )}
         </div>
-
-        <div className="sm:col-span-2 border-t border-slate-100 pt-4 mt-2">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              name="enableWhatsApp"
-              type="checkbox"
-              checked={form.enableWhatsApp !== false}
-              onChange={onChange}
-              className="h-5 w-5 rounded border-slate-300 text-[#00342b] focus:ring-[#00342b]"
-            />
-            <span className="text-sm font-extrabold text-slate-700">Enable WhatsApp Reminders</span>
-          </label>
-        </div>
-
-        {form.enableWhatsApp !== false ? (
-          <div className="sm:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-3 pl-4 border-l-2 border-[#00342b]/20 mt-1">
-            <label>
-              <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Custom Template Name (Optional)</span>
-              <input
-                name="whatsappTemplateName"
-                value={form.whatsappTemplateName || ""}
-                onChange={onChange}
-                placeholder="e.g. session_reminder_alt"
-                className={fieldClass("whatsappTemplateName", "mt-1 h-11 w-full rounded-xl px-4 text-xs outline-none")}
-              />
-            </label>
-            <label>
-              <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Custom Msg Title (Optional)</span>
-              <input
-                name="whatsappCustomTitle"
-                value={form.whatsappCustomTitle || ""}
-                onChange={onChange}
-                placeholder="e.g. Special Live Workshop"
-                className={fieldClass("whatsappCustomTitle", "mt-1 h-11 w-full rounded-xl px-4 text-xs outline-none")}
-              />
-            </label>
-            <label>
-              <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Custom Button Link (Optional)</span>
-              <input
-                name="whatsappButtonUrl"
-                value={form.whatsappButtonUrl || ""}
-                onChange={onChange}
-                placeholder="e.g. react-hooks-live"
-                className={fieldClass("whatsappButtonUrl", "mt-1 h-11 w-full rounded-xl px-4 text-xs outline-none")}
-              />
-            </label>
-          </div>
-        ) : null}
 
         <div className="sm:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-extrabold text-emerald-950">
           {form.isRecurring
@@ -505,7 +347,7 @@ export default function CreateSessionSection({
                       .map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d])
                       .join(", ")
                   : "No days selected"
-              }), `
+              })${form.recurrenceEndDate ? ` until ${form.recurrenceEndDate}` : ""}, `
             : "Recurrence: One-time session, "}
           {form.startTime && form.endTime
             ? `${formatTime(form.startTime)} to ${formatTime(form.endTime)}`
@@ -529,7 +371,7 @@ export default function CreateSessionSection({
             : "Creating recurring session..."
           : editingSessionId
             ? "Update recurring session"
-            : "Create daily session"}
+            : "Create recurring session"}
       </button>
     </form>
   );

@@ -118,6 +118,7 @@ function normalizeSession(dto) {
     recurrenceType: raw.recurrenceType || "daily",
     trainerInstructions: raw.trainerInstructions || "",
     recurringDays,
+    recurrenceEndDate: raw.recurrenceEndDate || raw.recurrence_end_date || null,
     enableWhatsApp: raw.enableWhatsApp !== false,
     whatsappTemplateName: raw.whatsappTemplateName || "",
     whatsappCustomTitle: raw.whatsappCustomTitle || "",
@@ -170,6 +171,24 @@ function normalizeSessionPayload(payload) {
   const courseId = String(payload.courseId || "").trim();
   const courseTitle = String(payload.courseTitle || "").trim();
   const category = String(payload.category || "").trim();
+
+  const WEEKDAY_MAP = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
+  
+  let rawDays = payload.recurringDays;
+  if (typeof rawDays === 'string') {
+    try {
+      rawDays = JSON.parse(rawDays);
+    } catch {
+      rawDays = rawDays.split(',').map(s => s.trim());
+    }
+  }
+  const selectedDays = Array.isArray(rawDays) ? rawDays : [];
+
+  const formattedRecurringDays = selectedDays.map(day => {
+    const val = String(day).trim().toLowerCase();
+    return WEEKDAY_MAP[val] ?? Number(val);
+  }).filter(n => !isNaN(n) && n >= 0 && n <= 6);
+
   const data = {
     title: String(payload.title || "").trim(),
     subtitle: String(payload.subtitle || "").trim(),
@@ -181,12 +200,8 @@ function normalizeSessionPayload(payload) {
     isRecurring: payload.isRecurring !== false,
     recurrenceType: payload.recurrenceType || "daily",
     trainerInstructions: String(payload.trainerInstructions || "").trim(),
-    recurringDays: Array.isArray(payload.recurringDays) ? payload.recurringDays : [],
-    enableWhatsApp: payload.enableWhatsApp !== false,
-    whatsappTemplateName: String(payload.whatsappTemplateName || "").trim(),
-    whatsappCustomTitle: String(payload.whatsappCustomTitle || "").trim(),
-    whatsappButtonUrl: String(payload.whatsappButtonUrl || "").trim(),
-    recurringDays: payload.recurringDays ? (typeof payload.recurringDays === 'string' ? payload.recurringDays : JSON.stringify(payload.recurringDays)) : null,
+    recurringDays: formattedRecurringDays.length > 0 ? JSON.stringify(formattedRecurringDays) : null,
+    recurrenceEndDate: payload.recurrenceEndDate || null,
     enableWhatsApp: payload.enableWhatsApp !== false,
     whatsappTemplateName: String(payload.whatsappTemplateName || "").trim() || null,
     whatsappCustomTitle: String(payload.whatsappCustomTitle || "").trim() || null,
