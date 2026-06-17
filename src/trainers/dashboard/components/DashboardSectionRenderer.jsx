@@ -1,4 +1,4 @@
-import TrainerAttendancePage from "../../attendance/pages/TrainerAttendancePage";
+import TrainerAttendancePage from "../../pages/TrainerAttendancePage";
 import TrainerPaymentsSection from "../../payments/components/TrainerPaymentsSection";
 import CreateSessionSection from "../sections/CreateSessionSection";
 import DashboardOverviewSection from "../sections/DashboardOverviewSection";
