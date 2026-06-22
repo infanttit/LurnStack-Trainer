@@ -41,7 +41,9 @@ export default function TrainerDashboardPage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [paymentMenuOpen, setPaymentMenuOpen] = useState(false);
+  const { activeTab, activePaymentView } = getDashboardRouteState(location.pathname);
+
+  const [paymentMenuOpen, setPaymentMenuOpen] = useState(activeTab === "earnings");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [form, setForm] = useState(initialSessionForm);
@@ -60,8 +62,6 @@ export default function TrainerDashboardPage() {
   const [statusLoading, setStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState("");
   const statusCheckBlockedRef = useRef(false);
-
-  const { activeTab, activePaymentView } = getDashboardRouteState(location.pathname);
   const trainerActionsLocked = !isTrainerActive;
 
   const activeSessions = useMemo(
@@ -147,6 +147,14 @@ export default function TrainerDashboardPage() {
     }, 30000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "earnings") {
+      setPaymentMenuOpen(true);
+    } else {
+      setPaymentMenuOpen(false);
+    }
+  }, [activeTab]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;

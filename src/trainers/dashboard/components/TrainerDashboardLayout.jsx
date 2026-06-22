@@ -70,7 +70,7 @@ export default function TrainerDashboardLayout({
               onNavigate={onNavigate}
             />
           ))}
-          {paymentMenuOpen || activeTab === "earnings" ? (
+          {paymentMenuOpen ? (
             <div className={["space-y-1", sidebarCollapsed ? "" : "pl-3"].join(" ")}>
               {paymentRouteItems.map((item) => (
                 <PaymentRouteButton

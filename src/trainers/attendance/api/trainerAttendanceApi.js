@@ -34,7 +34,9 @@ function normalizeStudent(dto) {
     status: String(raw.status || raw.attendanceStatus || "absent").toLowerCase(),
     firstJoinedAt: raw.firstJoinedAt || raw.first_joined_at || "",
     lastJoinedAt: raw.lastJoinedAt || raw.last_joined_at || "",
+    lastLeftAt: raw.lastLeftAt || "",
     joinCount: toNumber(raw.joinCount ?? raw.joins),
+    durationSeconds: toNumber(raw.durationSeconds),
     raw,
   };
 }
@@ -72,7 +74,7 @@ function normalizeTrainerSession(dto) {
 
 export async function getTrainerAttendanceSessions() {
   try {
-    const res = await axiosClient.get("/api/trainer/sessions");
+    const res = await axiosClient.get("/api/v1/trainer/sessions");
     const payload = unwrap(res);
     const sessions = Array.isArray(payload.data) ? payload.data : [];
     return sessions.map(normalizeTrainerSession).filter((session) => session.id);
@@ -89,5 +91,74 @@ export async function getTrainerSessionAttendance(sessionId) {
     return normalizeSessionAttendance(unwrap(res));
   } catch (err) {
     throw new Error(attendanceError(err, "Unable to load session attendance."));
+  }
+}
+
+export async function getDailyAttendance(sessionId, date) {
+  try {
+    const res = await axiosClient.get(`/api/v1/trainer/attendance`, {
+      params: { sessionId, date },
+    });
+    return unwrap(res).data;
+  } catch (err) {
+    throw new Error(attendanceError(err, "Unable to load daily attendance."));
+  }
+}
+
+export async function extendSessionOccurrence(sessionId, occurrenceId, additionalMinutes) {
+  try {
+    const res = await axiosClient.post(
+      `/api/v1/trainer/sessions/${encodeURIComponent(sessionId)}/occurrences/${encodeURIComponent(occurrenceId)}/extend`,
+      { additionalMinutes }
+    );
+    return unwrap(res).data;
+  } catch (err) {
+    throw new Error(attendanceError(err, "Unable to extend session."));
+  }
+}
+
+export async function getTrainerCoursesAttendance() {
+  try {
+    const res = await axiosClient.get("/api/trainer/courses");
+    const payload = unwrap(res);
+    return Array.isArray(payload.data) ? payload.data : [];
+  } catch (err) {
+    throw new Error(attendanceError(err, "Unable to load trainer courses."));
+  }
+}
+
+export async function getCourseAttendanceSummary(courseId) {
+  try {
+    const res = await axiosClient.get(
+      `/api/trainer/courses/${encodeURIComponent(courseId)}/attendance-summary`
+    );
+    const payload = unwrap(res);
+    return Array.isArray(payload.data) ? payload.data : [];
+  } catch (err) {
+    throw new Error(attendanceError(err, "Unable to load course attendance summary."));
+  }
+}
+
+export async function getCourseStudentAttendance(courseId) {
+  try {
+    const res = await axiosClient.get(
+      `/api/trainer/courses/${encodeURIComponent(courseId)}/student-attendance`
+    );
+    const payload = unwrap(res);
+    return Array.isArray(payload.data) ? payload.data : [];
+  } catch (err) {
+    throw new Error(attendanceError(err, "Unable to load student attendance for course."));
+  }
+}
+
+export async function getAttendanceEligibility(courseId) {
+  try {
+    const res = await axiosClient.get(
+      `/api/trainer/courses/${encodeURIComponent(courseId)}/attendance-eligibility`
+    );
+    const payload = unwrap(res);
+    return Array.isArray(payload.data) ? payload.data : [];
+  } catch (err) {
+    throw new Error(attendanceError(err, "Unable to load attendance eligibility."));
   }
 }

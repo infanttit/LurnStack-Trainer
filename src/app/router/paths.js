@@ -12,6 +12,7 @@ export const PATHS = {
   TRAINER_ACCOUNT_DETAILS: "/trainer-dashboard/payments/account-details",
   TRAINER_PAYOUT_HISTORY: "/trainer-dashboard/payments/payout-history",
   TRAINER_ATTENDANCE: "/trainer/attendance",
+  TRAINER_SESSION_HISTORY: "/trainer/sessions/:sessionId/history",
   LOGIN: "/login",
   SIGNUP: "/signup",
 };
