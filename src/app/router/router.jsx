@@ -2,7 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import SignupPage from "../../auth/pages/SignupPage";
 import LoginPage from "../../auth/pages/LoginPage";
 import RequireAuth from "../../auth/components/RequireAuth";
-import TrainerAttendancePage from "../../trainers/pages/TrainerAttendancePage";
+import TrainerAttendancePage from "../../trainers/attendance/pages/TrainerAttendancePage";
+import TrainerSessionHistoryPage from "../../trainers/attendance/pages/TrainerSessionHistoryPage";
 import TrainerDashboardPage from "../../trainers/pages/TrainerDashboardPage";
 import { PATHS } from "./paths";
 
@@ -38,6 +39,14 @@ export default function AppRouter() {
         element={(
           <RequireAuth role="trainer">
             <TrainerAttendancePage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path={PATHS.TRAINER_SESSION_HISTORY}
+        element={(
+          <RequireAuth role="trainer">
+            <TrainerSessionHistoryPage />
           </RequireAuth>
         )}
       />

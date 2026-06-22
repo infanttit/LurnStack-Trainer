@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { FiXCircle, FiBookOpen } from "react-icons/fi";
 import {
   getTrainerAttendanceSessions,
   getTrainerSessionAttendance,
 } from "../api/trainerAttendanceApi";
+import { getCourseStudentAttendance } from "../attendance/api/trainerAttendanceApi";
 
 
 
@@ -84,16 +86,17 @@ function SummaryCard({ label, value, tone = "slate" }) {
 function normalizeTableStudent(student) {
   const isEstimated = Boolean(student.durationEstimated);
   let leaveTimeText = "-";
-  if (student.isLeaveTimeNull) {
+  if (student.isLeaveTimeNull || !student.leaveTime) {
     leaveTimeText = "Active";
   } else if (student.leaveTime && student.leaveTime !== student.joinTime) {
     leaveTimeText = formatTime(student.leaveTime);
   }
 
   let statusLabel = "Absent";
-  if (student.status === "tracking" || student.status === "pending") statusLabel = "Tracking";
-  else if (student.status === "rescheduled") statusLabel = "Rescheduled";
-  else if (student.status === "present") statusLabel = "Present";
+  const st = String(student.status || "").toLowerCase();
+  if (st === "tracking" || st === "pending") statusLabel = "Tracking";
+  else if (st === "rescheduled") statusLabel = "Rescheduled";
+  else if (st === "present" || st === "joined" || st === "attended" || st === "late") statusLabel = "Present";
 
   return {
     name: student.fullName || "Student",
@@ -107,6 +110,7 @@ function normalizeTableStudent(student) {
   };
 }
 
+
 export default function TrainerAttendancePage({ embedded = false }) {
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
@@ -116,6 +120,11 @@ export default function TrainerAttendancePage({ embedded = false }) {
   const [activeFilter, setActiveFilter] = useState("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Student details modal state
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [courseStudents, setCourseStudents] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -231,6 +240,21 @@ export default function TrainerAttendancePage({ embedded = false }) {
           : activeFilter === "rescheduled"
             ? "No rescheduled sessions found."
             : "No attendance data found for this date.";
+
+  const handleViewStudentDetails = async (student) => {
+    setSelectedStudent(student);
+    const identifier = selectedSession?.courseId || selectedSession?.id;
+    if (!identifier) return;
+    setLoadingHistory(true);
+    try {
+      const history = await getCourseStudentAttendance(identifier);
+      setCourseStudents(history);
+    } catch (err) {
+      console.error("Failed to load student history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
 
   return (
@@ -366,6 +390,7 @@ export default function TrainerAttendancePage({ embedded = false }) {
                             <th className="px-3 py-3 font-black">Leave</th>
                             <th className="px-3 py-3 font-black">Joins</th>
                             <th className="px-3 py-3 font-black">Duration</th>
+                            <th className="px-3 py-3 font-black text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white animate-[fade-in_180ms_ease-out]">
@@ -389,6 +414,14 @@ export default function TrainerAttendancePage({ embedded = false }) {
                                 )}
                               </td>
                               <td className="px-3 py-3 font-semibold text-slate-600">{student.duration}</td>
+                              <td className="px-3 py-3 text-right">
+                                <button
+                                  onClick={() => handleViewStudentDetails(student)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-indigo-700 transition-colors hover:bg-slate-50"
+                                >
+                                  View Details
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -411,6 +444,122 @@ export default function TrainerAttendancePage({ embedded = false }) {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+
+      {/* Student Details Modal */}
+      {selectedStudent && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4 animate-in fade-in backdrop-blur-sm">
+          <div className="w-full max-w-4xl rounded-3xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-slate-200 p-6">
+              <div>
+                <h3 className="text-xl font-black text-slate-900">{selectedStudent.name}</h3>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{selectedStudent.email || "No email"}</p>
+              </div>
+              <button
+                onClick={() => setSelectedStudent(null)}
+                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <FiXCircle className="text-2xl" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              {(() => {
+                const studentHistory = courseStudents.filter(s => s.student?.fullName === selectedStudent.name || s.student?.email === selectedStudent.email);
+                const totalSessions = studentHistory.length;
+                const presentCount = studentHistory.filter(s => s.status === "present" || s.status === "joined" || s.status === "late").length;
+                const absentCount = studentHistory.filter(s => s.status === "absent").length;
+                const attendancePct = totalSessions > 0 ? (presentCount / totalSessions) * 100 : 0;
+                
+                return (
+                  <div className="flex flex-col lg:flex-row gap-6">
+                    {/* Left Panel: Summary Stats */}
+                    <div className="w-full lg:w-1/3 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Sessions</div>
+                          <div className="mt-1 text-2xl font-black text-slate-900">{totalSessions}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Attendance %</div>
+                          <div className="mt-1 text-2xl font-black text-indigo-600">{attendancePct.toFixed(0)}%</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Present</div>
+                          <div className="mt-1 text-2xl font-black text-emerald-600">{presentCount}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Absent</div>
+                          <div className="mt-1 text-2xl font-black text-red-600">{absentCount}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="rounded-xl border border-slate-200 bg-white p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                          <FiBookOpen className="text-indigo-600" />
+                          <h4 className="font-extrabold text-slate-900">Current Occurrence</h4>
+                        </div>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="font-semibold text-slate-500">Status</span>
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] uppercase font-black tracking-wider ${statusBadgeClass(selectedStudent.status)}`}>
+                              {selectedStudent.status}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-semibold text-slate-500">Duration</span>
+                            <span className="font-bold text-slate-900">{selectedStudent.duration}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-semibold text-slate-500">First Join</span>
+                            <span className="font-bold text-slate-900">{selectedStudent.joinTime || "-"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Panel: History List */}
+                    <div className="w-full lg:w-2/3 flex flex-col h-[400px]">
+                      <h4 className="font-extrabold text-slate-900 mb-4">Attendance History</h4>
+                      <div className="flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                        <table className="min-w-full text-left text-sm">
+                          <thead className="bg-slate-50 sticky top-0 z-10">
+                            <tr className="border-b border-slate-200 text-[10px] uppercase tracking-widest text-slate-500">
+                              <th className="px-4 py-3 font-extrabold">Date</th>
+                              <th className="px-4 py-3 font-extrabold">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {studentHistory.length > 0 ? studentHistory.map(record => (
+                              <tr key={record.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                <td className="px-4 py-3 font-semibold text-slate-600">{new Date(record.occurrenceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] uppercase font-black tracking-wider ${
+                                    record.status === 'present' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100' :
+                                    record.status === 'late' ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-100' :
+                                    'bg-red-50 text-red-700 ring-1 ring-red-100'
+                                  }`}>
+                                    {record.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            )) : (
+                              <tr>
+                                <td colSpan="2" className="px-4 py-8 text-center text-slate-500 font-semibold">
+                                  {loadingHistory ? "Loading history..." : "No historical records found for this student."}
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

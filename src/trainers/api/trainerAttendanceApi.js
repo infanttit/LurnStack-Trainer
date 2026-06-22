@@ -34,13 +34,22 @@ function firstValue(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "") || "";
 }
 
-const PRESENT_THRESHOLD_SECONDS = 600; // 10 minutes
+// Remove hardcoded 10 minute threshold, we will use 30% of session duration
+// const PRESENT_THRESHOLD_SECONDS = 600; 
 
 function getRecordDurationSeconds(record, sessionEndedAt = "", isSessionEnded = false) {
   const raw = record || {};
 
   const joinedAt = firstValue(raw.firstJoinedAt, raw.joinedAt, raw.startTime, raw.joined_at, raw.joinTime);
-  const explicitLeftAt = firstValue(raw.lastJoinedAt, raw.last_joined_at, raw.leftAt, raw.left_at, raw.leaveTime);
+  let explicitLeftAt = firstValue(raw.leftAt, raw.left_at, raw.leaveTime);
+  
+  // If no explicit leave time is provided but session is over, cap the leave time to session end
+  if (!explicitLeftAt && isSessionEnded && sessionEndedAt) {
+    explicitLeftAt = sessionEndedAt;
+  } else if (!explicitLeftAt && !isSessionEnded) {
+    // If session is ongoing, calculate up to now
+    explicitLeftAt = new Date().toISOString();
+  }
   const isAggregate = toNumber(raw.joinCount ?? raw.joins) > 1;
 
   // 1. If this is a SINGLE join session (not an aggregate of multiple joins with a gap), 
@@ -114,7 +123,7 @@ function attendanceError(err, fallback) {
   return getAxiosErrorMessage(err, fallback);
 }
 
-function normalizeStudent(dto, sessionEndedAt = "", isSessionEnded = false) {
+function normalizeStudent(dto, sessionEndedAt = "", isSessionEnded = false, sessionDurationSeconds = 3600) {
   const raw = dto || {};
   const records = firstValue(
     raw.attendanceRecords,
@@ -133,9 +142,13 @@ function normalizeStudent(dto, sessionEndedAt = "", isSessionEnded = false) {
   );
 
   let status = "absent";
-  if (totalDurationSeconds >= PRESENT_THRESHOLD_SECONDS) {
+  
+  // Requirement: 30% of session duration
+  const requiredSeconds = Math.max(60, sessionDurationSeconds * 0.3);
+
+  if (totalDurationSeconds >= requiredSeconds) {
     status = "present";
-  } else if (totalDurationSeconds > 0 && totalDurationSeconds < PRESENT_THRESHOLD_SECONDS) {
+  } else if (totalDurationSeconds > 0 && totalDurationSeconds < requiredSeconds) {
     status = "absent";
   } else if (backendStatus === "tracking" || backendStatus === "pending") {
     status = backendStatus;
@@ -148,8 +161,14 @@ function normalizeStudent(dto, sessionEndedAt = "", isSessionEnded = false) {
   }
 
   const joinTime = firstValue(raw.joinTime, raw.join_time, raw.firstJoinedAt, raw.first_joined_at, raw.joinedAt, raw.joined_at, raw.startTime) || "";
-  const explicitLeave = raw.leaveTime ?? raw.leave_time ?? raw.lastJoinedAt ?? raw.last_joined_at ?? raw.leftAt ?? raw.clientLeftAt ?? null;
-  const isLeaveTimeNull = raw.leaveTime === null || raw.leave_time === null || raw.leftAt === null;
+  let explicitLeave = raw.leaveTime ?? raw.leave_time ?? raw.leftAt ?? raw.clientLeftAt ?? null;
+  let isLeaveTimeNull = raw.leaveTime === null || raw.leave_time === null || raw.leftAt === null;
+
+  // If the session has ended but they never clicked "leave", cap their leave time to the session end time
+  if ((isLeaveTimeNull || !explicitLeave) && isSessionEnded && sessionEndedAt) {
+    explicitLeave = sessionEndedAt;
+    isLeaveTimeNull = false; // No longer null for UI display purposes
+  }
 
   return {
     studentId: String(raw.studentId || raw.id || raw._id || raw.userId || ""),
@@ -171,49 +190,34 @@ function normalizeStudent(dto, sessionEndedAt = "", isSessionEnded = false) {
 function normalizeSessionAttendance(payload) {
   const source = payload?.data || payload || {};
 
-  // 🔍 DEV DEBUG — remove once duration field names are confirmed
-  if (process.env.NODE_ENV === "development") {
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("lurnstack:debug:attendance", JSON.stringify(payload));
-        fetch("/api/debug-log", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        }).catch(() => {});
-      }
-    } catch (e) { }
-    console.group("[LurnStack] 📋 Raw attendance response from backend");
-    console.log("Session endedAt:", source.endedAt, "| endsAt:", source.endsAt, "| endTime:", source.endTime, "| completedAt:", source.completedAt);
-    if (Array.isArray(source.students)) {
-      source.students.forEach((s, i) => {
-        console.log(
-          `[${i}] ${s.fullName || s.name}` +
-          ` | durationSeconds=${s.durationSeconds ?? "—"}` +
-          ` | durationMinutes=${s.durationMinutes ?? "—"}` +
-          ` | totalDurationSeconds=${s.totalDurationSeconds ?? "—"}` +
-          ` | firstJoinedAt=${s.firstJoinedAt ?? "—"}` +
-          ` | lastJoinedAt=${s.lastJoinedAt ?? "—"}` +
-          ` | leftAt=${s.leftAt ?? "—"}` +
-          ` | joinCount=${s.joinCount ?? "—"}` +
-          ` | joins=${s.joins ?? "—"}`
-        );
-      });
-    }
-    console.groupEnd();
-  }
-
-
   // Use session end time so student duration can be estimated when leftAt is missing
-  // If no end time is provided by the backend, assume the session is ongoing and calculate up to NOW.
   const explicitSessionEndedAt = firstValue(
     source.endedAt,
     source.endsAt,
     source.endTime,
     source.completedAt
   );
-  const isSessionEnded = Boolean(explicitSessionEndedAt);
-  const sessionEndedAt = explicitSessionEndedAt || new Date().toISOString(); // ← Fallback to current time if ongoing
+  
+  const explicitSessionStartedAt = firstValue(
+    source.scheduledAt,
+    source.startsAt,
+    source.startTime,
+    source.startedAt,
+    source.sessionDate
+  );
+
+  // Consider session ended if explicit end time is in the past OR explicitly provided
+  const isSessionEnded = Boolean(explicitSessionEndedAt && new Date(explicitSessionEndedAt).getTime() <= new Date().getTime());
+  const sessionEndedAt = explicitSessionEndedAt || new Date().toISOString();
+
+  let sessionDurationSeconds = 3600; // default 1 hour
+  if (explicitSessionStartedAt && explicitSessionEndedAt) {
+    const sStart = new Date(explicitSessionStartedAt).getTime();
+    const sEnd = new Date(explicitSessionEndedAt).getTime();
+    if (!Number.isNaN(sStart) && !Number.isNaN(sEnd) && sEnd > sStart) {
+      sessionDurationSeconds = (sEnd - sStart) / 1000;
+    }
+  }
 
   const sourceRows = firstValue(
     source.history,
@@ -258,7 +262,7 @@ function normalizeSessionAttendance(payload) {
       }
     });
   }
-  const students = Array.from(studentGroups.values()).map((dto) => normalizeStudent(dto, sessionEndedAt, isSessionEnded));
+  const students = Array.from(studentGroups.values()).map((dto) => normalizeStudent(dto, sessionEndedAt, isSessionEnded, sessionDurationSeconds));
   const totalStudents = toNumber(source.totalStudents) || students.length;
   const presentCount = students.filter((student) => student.status === "present").length;
   const absentCount = students.filter((student) => student.status === "absent").length;
@@ -286,6 +290,7 @@ function normalizeTrainerSession(dto) {
   const raw = dto || {};
   return {
     id: String(raw.id || raw._id || raw.sessionId || ""),
+    courseId: String(raw.courseId || raw.course?.id || ""),
     title: raw.title || raw.sessionTitle || raw.classTitle || "Session",
     courseTitle: raw.courseTitle || raw.course?.title || raw.courseName || "Course",
     scheduledAt: raw.scheduledAt || raw.startsAt || raw.startTime || raw.createdAt || "",
