@@ -245,6 +245,55 @@ function SessionRow({
                     </div>
                   </div>
 
+                  {(session.totalHours || session.totalDays) ? (
+                    <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4 max-w-xl">
+                      <div className="text-xs font-extrabold text-slate-700 mb-2.5 uppercase tracking-wider">Course Duration & Progress</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {session.totalHours ? (
+                          <div>
+                            <span className="text-xs font-medium text-slate-500 block">Total Hours</span>
+                            <span className="text-sm font-extrabold text-slate-900">{session.totalHours} hours</span>
+                            {session.completedHours > 0 ? (
+                              <div className="mt-1.5">
+                                <div className="flex justify-between text-[10px] font-bold text-[#006b58] mb-1">
+                                  <span>{session.completedHours} hrs completed</span>
+                                  <span>{Math.round(Math.min(100, (session.completedHours / session.totalHours) * 100))}%</span>
+                                </div>
+                                <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-[#006b58] rounded-full" 
+                                    style={{ width: `${Math.min(100, (session.completedHours / session.totalHours) * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {session.totalDays ? (
+                          <div>
+                            <span className="text-xs font-medium text-slate-500 block">Total Days</span>
+                            <span className="text-sm font-extrabold text-slate-900">{session.totalDays} days</span>
+                            {session.completedDays > 0 ? (
+                              <div className="mt-1.5">
+                                <div className="flex justify-between text-[10px] font-bold text-[#006b58] mb-1">
+                                  <span>{session.completedDays} days completed</span>
+                                  <span>{Math.round(Math.min(100, (session.completedDays / session.totalDays) * 100))}%</span>
+                                </div>
+                                <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-[#006b58] rounded-full" 
+                                    style={{ width: `${Math.min(100, (session.completedDays / session.totalDays) * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
                   {session.isTodayCancelled ? (
                     <div className="mt-4 inline-flex rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
                       Today's class is cancelled{session.todayCancellationReason ? `: ${session.todayCancellationReason}` : "."}

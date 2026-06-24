@@ -20,6 +20,8 @@ export const initialSessionForm = {
   whatsappCustomTitle: "",
   whatsappButtonUrl: "",
   recurrenceEndDate: "",
+  totalHours: "",
+  totalDays: "",
 };
 
 export const sessionFieldLabels = {
@@ -30,6 +32,8 @@ export const sessionFieldLabels = {
   endTime: "End time",
   meetingLink: "Meeting link",
   recurrenceEndDate: "Recurrence End Date",
+  totalHours: "Total Course Duration (Hours)",
+  totalDays: "Total Course Duration (Days)",
 };
 
 export const categorySuggestions = [
