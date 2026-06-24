@@ -157,12 +157,10 @@ function normalizeSession(dto) {
     trainerEmail: raw.trainerEmail || "",
     createdAt: raw.createdAt || "",
     updatedAt: raw.updatedAt || "",
-    trainerInstructions: raw.trainerInstructions || "",
-    recurringDays: raw.recurringDays || null,
-    enableWhatsApp: raw.enableWhatsApp ?? true,
-    whatsappTemplateName: raw.whatsappTemplateName || "",
-    whatsappCustomTitle: raw.whatsappCustomTitle || "",
-    whatsappButtonUrl: raw.whatsappButtonUrl || "",
+    totalHours: raw.totalHours !== undefined && raw.totalHours !== null ? Number(raw.totalHours) : (raw.total_hours !== undefined && raw.total_hours !== null ? Number(raw.total_hours) : null),
+    totalDays: raw.totalDays !== undefined && raw.totalDays !== null ? Number(raw.totalDays) : (raw.total_days !== undefined && raw.total_days !== null ? Number(raw.total_days) : null),
+    completedHours: raw.completedHours !== undefined && raw.completedHours !== null ? Number(raw.completedHours) : (raw.completed_hours !== undefined && raw.completed_hours !== null ? Number(raw.completed_hours) : 0),
+    completedDays: raw.completedDays !== undefined && raw.completedDays !== null ? Number(raw.completedDays) : (raw.completed_days !== undefined && raw.completed_days !== null ? Number(raw.completed_days) : 0),
     raw,
   };
 }
@@ -206,6 +204,8 @@ function normalizeSessionPayload(payload) {
     whatsappTemplateName: String(payload.whatsappTemplateName || "").trim() || null,
     whatsappCustomTitle: String(payload.whatsappCustomTitle || "").trim() || null,
     whatsappButtonUrl: String(payload.whatsappButtonUrl || "").trim() || null,
+    totalHours: payload.totalHours !== "" && payload.totalHours !== undefined && payload.totalHours !== null ? Number(payload.totalHours) : null,
+    totalDays: payload.totalDays !== "" && payload.totalDays !== undefined && payload.totalDays !== null ? Number(payload.totalDays) : null,
   };
 
   if (courseId) {

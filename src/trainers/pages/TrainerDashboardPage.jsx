@@ -206,6 +206,18 @@ export default function TrainerDashboardPage() {
         }
       }
     }
+    if (form.totalHours !== "" && form.totalHours !== undefined && form.totalHours !== null) {
+      const hoursVal = Number(form.totalHours);
+      if (isNaN(hoursVal) || hoursVal <= 0) {
+        nextErrors.totalHours = "Total hours must be a positive number.";
+      }
+    }
+    if (form.totalDays !== "" && form.totalDays !== undefined && form.totalDays !== null) {
+      const daysVal = Number(form.totalDays);
+      if (isNaN(daysVal) || daysVal <= 0) {
+        nextErrors.totalDays = "Total days must be a positive number.";
+      }
+    }
     setFormErrors(nextErrors);
     return nextErrors;
   };
@@ -308,6 +320,8 @@ export default function TrainerDashboardPage() {
         whatsappTemplateName: details.whatsappTemplateName || "",
         whatsappCustomTitle: details.whatsappCustomTitle || "",
         whatsappButtonUrl: details.whatsappButtonUrl || "",
+        totalHours: details.totalHours ?? "",
+        totalDays: details.totalDays ?? "",
       });
       setMessage("");
       setError("");

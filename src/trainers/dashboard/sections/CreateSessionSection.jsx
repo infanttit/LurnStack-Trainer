@@ -238,6 +238,36 @@ export default function CreateSessionSection({
           {formErrors.meetingLink ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.meetingLink}</p> : null}
         </label>
 
+        <label>
+          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Total Course Duration (Hours)</span>
+          <input
+            name="totalHours"
+            type="number"
+            step="any"
+            min="0"
+            value={form.totalHours ?? ""}
+            onChange={onChange}
+            placeholder="e.g. 40"
+            className={fieldClass("totalHours", "mt-1 h-11 w-full rounded-xl px-4 text-sm outline-none")}
+          />
+          {formErrors.totalHours ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.totalHours}</p> : null}
+        </label>
+
+        <label>
+          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Total Course Duration (Days)</span>
+          <input
+            name="totalDays"
+            type="number"
+            step="1"
+            min="0"
+            value={form.totalDays ?? ""}
+            onChange={onChange}
+            placeholder="e.g. 30"
+            className={fieldClass("totalDays", "mt-1 h-11 w-full rounded-xl px-4 text-sm outline-none")}
+          />
+          {formErrors.totalDays ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.totalDays}</p> : null}
+        </label>
+
         {/* Recurrence Settings Group */}
         <div className="sm:col-span-2 rounded-2xl border border-slate-200 p-4 bg-slate-50">
           <label className="flex items-center gap-2 select-none">
