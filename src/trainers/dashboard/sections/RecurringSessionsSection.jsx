@@ -196,6 +196,11 @@ function SessionRow({
           >
             {status}
           </span>
+          {session.deleteRequested && (
+            <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+              Delete Requested
+            </div>
+          )}
         </td>
         <td className="px-4 py-3 align-top text-right">
           <button
@@ -307,6 +312,12 @@ function SessionRow({
                     </div>
                   ) : null}
 
+                  {session.deleteRejectReason ? (
+                    <div className="mt-4 inline-flex rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 shadow-sm">
+                      <span className="font-bold mr-1">Deletion Request Rejected:</span> {session.deleteRejectReason}
+                    </div>
+                  ) : null}
+
                   <div className="mt-5 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -373,7 +384,20 @@ function SessionRow({
                     
                     <button
                       type="button"
-                      disabled={lockedSession || actionId === `end:${session.id}`}
+                      disabled={
+                        lockedSession ||
+                        actionId === `end:${session.id}` ||
+                        (!session.totalDays && !session.totalHours) ||
+                        (session.totalDays && session.completedDays < session.totalDays) ||
+                        (session.totalHours && session.completedHours < session.totalHours)
+                      }
+                      title={
+                        (!session.totalDays && !session.totalHours) ||
+                        (session.totalDays && session.completedDays < session.totalDays) ||
+                        (session.totalHours && session.completedHours < session.totalHours)
+                          ? "You can only end the session after completing the full course duration."
+                          : "End permanently"
+                      }
                       onClick={() => onOpenSessionDialog(session.id, "end")}
                       className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-red-600 px-3 text-xs font-extrabold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm ml-auto"
                     >
@@ -383,12 +407,12 @@ function SessionRow({
                     
                     <button
                       type="button"
-                      disabled={trainerActionsLocked || actionId === `delete:${session.id}`}
-                      onClick={() => onOpenSessionDialog(session.id, "delete")}
+                      disabled={trainerActionsLocked || actionId === `requestDelete:${session.id}` || session.deleteRequested || !!session.deleteRejectReason}
+                      onClick={() => onOpenSessionDialog(session.id, "requestDelete")}
                       className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-red-50 px-3 text-xs font-extrabold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <FiTrash2 className="text-sm" />
-                      <span>Delete</span>
+                      <span>{session.deleteRequested ? "Delete Requested (Pending)" : session.deleteRejectReason ? "Request Rejected" : "Request Delete"}</span>
                     </button>
                   </div>
                 </div>

@@ -23,6 +23,7 @@ import {
   restoreTodayTrainerSession,
   resumeTrainerSession,
   updateTrainerSession,
+  requestDeleteTrainerSession,
 } from "../recurring/api/trainerSessionsApi";
 
 const INACTIVE_TRAINER_MESSAGE =
@@ -543,6 +544,7 @@ export default function TrainerDashboardPage() {
       else if (action === "resume") await resumeTrainerSession(sessionId);
       else if (action === "end") await endTrainerSession(sessionId);
       else if (action === "delete") await deleteTrainerSession(sessionId);
+      else if (action === "requestDelete") await requestDeleteTrainerSession(sessionId);
       else if (action === "cancelToday") await cancelTodayTrainerSession(sessionId, reason.trim());
       else if (action === "restoreToday") await restoreTodayTrainerSession(sessionId);
       toast.success(getActionSuccessMessage(action));
@@ -572,6 +574,10 @@ export default function TrainerDashboardPage() {
       end: {
         title: "End recurring session",
         message: "This permanently ends the daily session. Use pause if you only need a temporary stop.",
+      },
+      requestDelete: {
+        title: "Request session deletion",
+        message: "You cannot delete a session directly. This will send a request to the admin to delete the session.",
       },
       delete: {
         title: "Delete recurring session",
@@ -689,6 +695,7 @@ function getActionSuccessMessage(action) {
     resume: "Recurring session resumed.",
     end: "Recurring session ended permanently.",
     delete: "Recurring session deleted.",
+    requestDelete: "Deletion request sent to admin.",
     cancelToday: "Today's class cancelled.",
     restoreToday: "Today's class restored.",
   };

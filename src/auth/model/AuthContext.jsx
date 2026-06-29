@@ -7,7 +7,9 @@ import {
   logoutUser,
   registerTrainer,
   registerUser,
+  updateLocalUser,
 } from "./authStorage";
+import { updateProfileApi, uploadProfilePhotoApi, deleteProfilePhotoApi } from "../api/authApi";
 
 const AuthContext = createContext(null);
 
@@ -58,6 +60,33 @@ export function AuthProvider({ children }) {
       signOut: async () => {
         logoutUser();
         setUser(null);
+      },
+      updateUserProfile: (updates) => {
+        const updated = updateLocalUser(updates);
+        if (updated) {
+          setUser(updated);
+        }
+      },
+      updateProfile: async (data) => {
+        const result = await updateProfileApi(data);
+        if (result && result.user) {
+          const updated = updateLocalUser(result.user);
+          setUser(updated);
+          return updated;
+        }
+      },
+      updateProfilePicture: async (file) => {
+        const result = await uploadProfilePhotoApi(file);
+        if (result && result.profilePhotoUrl) {
+          const updated = updateLocalUser({ profilePhotoUrl: result.profilePhotoUrl });
+          setUser(updated);
+          return updated;
+        }
+      },
+      removeProfilePicture: async () => {
+        await deleteProfilePhotoApi();
+        const updated = updateLocalUser({ profilePhotoUrl: null });
+        setUser(updated);
       },
       bootstrapped,
     };

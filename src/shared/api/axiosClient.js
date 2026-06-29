@@ -6,7 +6,7 @@ const baseURL = String(env.apiBaseUrl || "").replace(/\/+$/, "");
 
 export const axiosClient = axios.create({
   baseURL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",

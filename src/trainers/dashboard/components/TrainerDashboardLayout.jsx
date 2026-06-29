@@ -7,7 +7,9 @@ import {
   FiX,
 } from "react-icons/fi";
 import { PATHS } from "../../../app/router/paths";
+import { useAuth } from "../../../auth";
 import { paymentRouteItems, trainerDashboardTabs } from "../dashboardRoutes";
+import TrainerProfileMenu from "./TrainerProfileMenu";
 
 export default function TrainerDashboardLayout({
   activeTab,
@@ -29,6 +31,7 @@ export default function TrainerDashboardLayout({
   user,
   inactiveMessage,
 }) {
+  const { updateUserProfile } = useAuth();
   return (
     <div className={[
       "grid h-full min-h-0 grid-cols-1 transition-[grid-template-columns] duration-300",
@@ -93,6 +96,8 @@ export default function TrainerDashboardLayout({
           isTrainerActive={isTrainerActive}
           statusError={statusError}
           onOpenSidebar={onOpenSidebar}
+          user={user}
+          updateUserProfile={updateUserProfile}
         />
         <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8">
           {trainerActionsLocked ? (
@@ -177,14 +182,27 @@ function SidebarUser({ collapsed, user, onLogout }) {
   return (
     <div className={["mt-auto pt-5", collapsed ? "lg:px-0" : ""].join(" ")}>
       {collapsed ? (
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-extrabold">
-          {(user?.fullName || "T").slice(0, 1).toUpperCase()}
+        <div className="mx-auto flex h-10 w-10 overflow-hidden items-center justify-center rounded-full bg-white/10 text-sm font-extrabold">
+          {user?.profilePhotoUrl || user?.profilePicture ? (
+            <img src={user?.profilePhotoUrl || user?.profilePicture} alt="Profile" className="h-full w-full object-cover" />
+          ) : (
+            (user?.fullName || "T").slice(0, 1).toUpperCase()
+          )}
         </div>
       ) : (
-        <>
-          <div className="truncate text-sm font-extrabold">{user?.fullName || "Trainer"}</div>
-          <div className="mt-1 break-all text-xs text-white/60">{user?.email}</div>
-        </>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 flex-shrink-0 overflow-hidden items-center justify-center rounded-full bg-white/10 text-sm font-extrabold">
+            {user?.profilePhotoUrl || user?.profilePicture ? (
+              <img src={user?.profilePhotoUrl || user?.profilePicture} alt="Profile" className="h-full w-full object-cover" />
+            ) : (
+              (user?.fullName || "T").slice(0, 1).toUpperCase()
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-extrabold">{user?.fullName || "Trainer"}</div>
+            <div className="mt-0.5 truncate text-xs text-white/60">{user?.email}</div>
+          </div>
+        </div>
       )}
       <button
         type="button"
@@ -202,43 +220,47 @@ function SidebarUser({ collapsed, user, onLogout }) {
   );
 }
 
-function DashboardHeader({ statusLoading, isTrainerActive, statusError, onOpenSidebar }) {
+function DashboardHeader({ statusLoading, isTrainerActive, statusError, onOpenSidebar, user, updateUserProfile }) {
   return (
     <header className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-8 sm:py-5">
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          onClick={onOpenSidebar}
-          className="mt-0.5 inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-[#00342b] text-white lg:hidden"
-          aria-label="Open trainer sidebar"
-        >
-          <FiMenu />
-        </button>
-        <div>
-          <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#006b58] lg:hidden">
-            Trainer Portal
-          </div>
-          <h1 className="text-xl font-extrabold leading-tight text-slate-950 sm:text-3xl">
-            Daily recurring live sessions
-          </h1>
-          <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm">
-            Create one live session once, then run it every day at the selected time.
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className={[
-              "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider",
-              statusLoading
-                ? "border-slate-200 bg-slate-50 text-slate-600"
-                : isTrainerActive
-                  ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-                  : "border-amber-100 bg-amber-50 text-amber-700",
-            ].join(" ")}
-            >
-              {statusLoading ? "Checking status" : isTrainerActive ? "Active trainer" : "Inactive trainer"}
-            </span>
-            {statusError ? <span className="text-xs font-semibold text-red-600">{statusError}</span> : null}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            onClick={onOpenSidebar}
+            className="mt-0.5 inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-[#00342b] text-white lg:hidden"
+            aria-label="Open trainer sidebar"
+          >
+            <FiMenu />
+          </button>
+          <div>
+            <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#006b58] lg:hidden">
+              Trainer Portal
+            </div>
+            <h1 className="text-xl font-extrabold leading-tight text-slate-950 sm:text-3xl">
+              Daily recurring live sessions
+            </h1>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm">
+              Create one live session once, then run it every day at the selected time.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={[
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider",
+                statusLoading
+                  ? "border-slate-200 bg-slate-50 text-slate-600"
+                  : isTrainerActive
+                    ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                    : "border-amber-100 bg-amber-50 text-amber-700",
+              ].join(" ")}
+              >
+                {statusLoading ? "Checking status" : isTrainerActive ? "Active trainer" : "Inactive trainer"}
+              </span>
+              {statusError ? <span className="text-xs font-semibold text-red-600">{statusError}</span> : null}
+            </div>
           </div>
         </div>
+        
+        <TrainerProfileMenu />
       </div>
     </header>
   );

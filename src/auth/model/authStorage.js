@@ -183,3 +183,15 @@ export function logoutUser() {
   session?.removeItem(USER_KEY);
 }
 
+export function updateLocalUser(updates) {
+  const user = loadUser();
+  if (!user) return null;
+  const updatedUser = { ...user, ...updates };
+  
+  const local = getWebStorage("local");
+  const persist = !!(local && local.getItem(USER_KEY));
+  
+  saveUser(updatedUser, { persist });
+  return updatedUser;
+}
+

@@ -137,3 +137,37 @@ export async function verifyOtpApi({ identifier, code }) {
   }
 }
 
+export async function updateProfileApi(data) {
+  try {
+    const res = await axiosClient.put("/api/auth/profile", data);
+    return unwrap(res);
+  } catch (err) {
+    throw new Error(getAxiosErrorMessage(err, "Unable to update profile."));
+  }
+}
+
+export async function uploadProfilePhotoApi(file) {
+  try {
+    const formData = new FormData();
+    formData.append("photo", file);
+    
+    const res = await axiosClient.post("/api/auth/profile/photo", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return unwrap(res);
+  } catch (err) {
+    throw new Error(getAxiosErrorMessage(err, "Unable to upload profile picture."));
+  }
+}
+
+export async function deleteProfilePhotoApi() {
+  try {
+    const res = await axiosClient.delete("/api/auth/profile/photo");
+    return unwrap(res);
+  } catch (err) {
+    throw new Error(getAxiosErrorMessage(err, "Unable to remove profile picture."));
+  }
+}
+

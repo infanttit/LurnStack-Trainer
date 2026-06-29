@@ -34,5 +34,6 @@ export function getDashboardRouteState(pathname) {
   if (path === PATHS.TRAINER_DASHBOARD_ATTENDANCE || path === PATHS.TRAINER_ATTENDANCE) {
     return { activeTab: "attendance", activePaymentView: "wallet" };
   }
+  if (path === PATHS.TRAINER_PROFILE) return { activeTab: "profile", activePaymentView: "wallet" };
   return { activeTab: "overview", activePaymentView: "wallet" };
 }

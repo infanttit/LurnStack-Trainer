@@ -140,6 +140,8 @@ function normalizeSession(dto) {
       raw.cancellationReason ||
       todayCancellation?.reason ||
       "",
+    deleteRequested: Boolean(raw.deleteRequested),
+    deleteRejectReason: raw.deleteRejectReason || null,
     priceInPaise:
       raw.priceInPaise ??
       raw.price_in_paise ??
@@ -432,6 +434,18 @@ export async function deleteTrainerSession(sessionId) {
     return true;
   } catch (err) {
     throw new Error(getTrainerSessionError(err, "Unable to delete recurring live session."));
+  }
+}
+
+export async function requestDeleteTrainerSession(sessionId) {
+  try {
+    const res = await axiosClient.post(
+      `/api/trainer/sessions/${encodeURIComponent(sessionId)}/request-delete`
+    );
+    const payload = unwrap(res);
+    return normalizeSession(payload.data);
+  } catch (err) {
+    throw new Error(getTrainerSessionError(err, "Unable to request deletion for recurring live session."));
   }
 }
 

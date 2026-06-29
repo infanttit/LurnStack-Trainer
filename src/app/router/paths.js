@@ -2,6 +2,7 @@ export const PATHS = {
   HOME: "/",
   TRAINER_DASHBOARD: "/trainer-dashboard",
   TRAINER_OVERVIEW: "/trainer-dashboard/overview",
+  TRAINER_PROFILE: "/trainer-dashboard/profile",
   TRAINER_CREATE_SESSION: "/trainer-dashboard/create-session",
   TRAINER_RECURRING_SESSIONS: "/trainer-dashboard/recurring-sessions",
   TRAINER_DASHBOARD_ATTENDANCE: "/trainer-dashboard/attendance",

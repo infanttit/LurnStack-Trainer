@@ -39,10 +39,10 @@ export default function ConfirmSessionDialog({ dialog, onClose, onConfirm, onRea
             onClick={onConfirm}
             className={[
               "h-10 rounded-xl px-5 text-sm font-extrabold text-white",
-              dialog.action === "end" || dialog.action === "delete" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700",
+              dialog.action === "end" || dialog.action === "delete" || dialog.action === "requestDelete" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700",
             ].join(" ")}
           >
-            {dialog.action === "delete" ? "Delete session" : dialog.action === "end" ? "End permanently" : "Cancel today"}
+            {dialog.action === "delete" ? "Delete session" : dialog.action === "requestDelete" ? "Send Request" : dialog.action === "end" ? "End permanently" : "Cancel today"}
           </button>
         </div>
       </div>

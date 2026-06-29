@@ -3,6 +3,7 @@ import TrainerPaymentsSection from "../../payments/components/TrainerPaymentsSec
 import CreateSessionSection from "../sections/CreateSessionSection";
 import DashboardOverviewSection from "../sections/DashboardOverviewSection";
 import RecurringSessionsSection from "../sections/RecurringSessionsSection";
+import MyProfilePage from "../../pages/MyProfilePage";
 
 export default function DashboardSectionRenderer({ activeTab, activePaymentView, data, handlers }) {
   if (activeTab === "create") {
@@ -53,6 +54,9 @@ export default function DashboardSectionRenderer({ activeTab, activePaymentView,
   }
   if (activeTab === "earnings") {
     return <TrainerPaymentsSection activeView={activePaymentView} isTrainerActive={data.isTrainerActive} />;
+  }
+  if (activeTab === "profile") {
+    return <MyProfilePage />;
   }
   return (
     <DashboardOverviewSection
