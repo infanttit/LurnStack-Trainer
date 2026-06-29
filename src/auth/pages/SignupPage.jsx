@@ -806,7 +806,7 @@ export default function SignupPage() {
         sent: true,
         verified: false,
         identifier: config.identifier,
-        expiresAt: result.expiresAt,
+        expiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
         secondsLeft: 60,
         cooldown: 60,
         attempts: 0,

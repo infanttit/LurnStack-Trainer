@@ -162,3 +162,27 @@ export async function getAttendanceEligibility(courseId) {
     throw new Error(attendanceError(err, "Unable to load attendance eligibility."));
   }
 }
+
+export async function markStudentAttendance({ occurrenceId, studentId, status }) {
+  try {
+    const res = await axiosClient.post(`/api/v1/trainer/attendance/mark`, {
+      occurrenceId,
+      studentId,
+      status,
+    });
+    return unwrap(res);
+  } catch (err) {
+    throw new Error(attendanceError(err, "Unable to mark student attendance."));
+  }
+}
+
+export async function getDailyAttendanceSummary(sessionId, date) {
+  try {
+    const res = await axiosClient.get(`/api/v1/trainer/attendance/summary`, {
+      params: { sessionId, date },
+    });
+    return unwrap(res).data;
+  } catch (err) {
+    throw new Error(attendanceError(err, "Unable to load daily attendance summary."));
+  }
+}
