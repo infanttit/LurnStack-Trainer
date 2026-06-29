@@ -65,3 +65,19 @@ export function readImageFile(file) {
     reader.readAsDataURL(file);
   });
 }
+
+export function formatDurationHours(totalHours) {
+  if (totalHours === null || totalHours === undefined || totalHours === "") return "";
+  const totalHoursNum = Number(totalHours);
+  if (isNaN(totalHoursNum) || totalHoursNum <= 0) return "";
+  const hours = Math.floor(totalHoursNum);
+  const minutes = Math.round((totalHoursNum - hours) * 60);
+  if (hours > 0 && minutes > 0) {
+    return `${hours} hr${hours > 1 ? "s" : ""} ${minutes} min${minutes > 1 ? "s" : ""}`;
+  } else if (hours > 0) {
+    return `${hours} hr${hours > 1 ? "s" : ""}`;
+  } else if (minutes > 0) {
+    return `${minutes} min${minutes > 1 ? "s" : ""}`;
+  }
+  return "";
+}

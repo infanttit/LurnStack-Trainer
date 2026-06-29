@@ -37,6 +37,88 @@ const emptyConfirmDialog = {
   reason: "",
 };
 
+function autoCalculateDuration(formState) {
+  const { startTime, endTime, recurringDays, recurrenceEndDate, totalDays } = formState;
+
+  if (!startTime || !endTime) {
+    return {
+      totalDays: totalDays || "",
+      totalHoursPart: "",
+      totalMinutesPart: "",
+    };
+  }
+
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const [endHour, endMinute] = endTime.split(":").map(Number);
+  if (isNaN(startHour) || isNaN(startMinute) || isNaN(endHour) || isNaN(endMinute)) {
+    return {
+      totalDays: totalDays || "",
+      totalHoursPart: "",
+      totalMinutesPart: "",
+    };
+  }
+
+  const startTotal = startHour * 60 + startMinute;
+  const endTotal = endHour * 60 + endMinute;
+  const durationPerClass = endTotal - startTotal;
+
+  if (durationPerClass <= 0) {
+    return {
+      totalDays: totalDays || "",
+      totalHoursPart: "",
+      totalMinutesPart: "",
+    };
+  }
+
+  // Determine number of days
+  let daysCount = 0;
+  let hasRecurrence = false;
+
+  if (recurrenceEndDate && recurringDays && recurringDays.length > 0) {
+    const today = new Date();
+    const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const parts = recurrenceEndDate.split("-").map(Number);
+    if (parts.length === 3 && !parts.some(isNaN)) {
+      const endDate = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (endDate >= startDate) {
+        hasRecurrence = true;
+        let current = new Date(startDate);
+        let limit = 10000;
+        while (current <= endDate && limit > 0) {
+          if (recurringDays.includes(current.getDay())) {
+            daysCount++;
+          }
+          current.setDate(current.getDate() + 1);
+          limit--;
+        }
+      }
+    }
+  }
+
+  // Fallback to manual totalDays or default to 1 day
+  let finalDays = 1;
+  let finalDaysString = totalDays || "";
+
+  if (hasRecurrence) {
+    finalDays = daysCount > 0 ? daysCount : 1;
+    finalDaysString = String(daysCount);
+  } else if (totalDays && !isNaN(Number(totalDays)) && Number(totalDays) > 0) {
+    finalDays = Number(totalDays);
+    finalDaysString = String(totalDays);
+  }
+
+  const totalMinutes = finalDays * durationPerClass;
+  const calculatedHoursPart = Math.floor(totalMinutes / 60);
+  const calculatedMinutesPart = totalMinutes % 60;
+
+  return {
+    totalDays: finalDaysString,
+    totalHoursPart: calculatedHoursPart === 0 ? "" : String(calculatedHoursPart),
+    totalMinutesPart: calculatedMinutesPart === 0 ? "" : String(calculatedMinutesPart),
+  };
+}
+
 export default function TrainerDashboardPage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -158,7 +240,25 @@ export default function TrainerDashboardPage() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+    setForm((prev) => {
+      const next = { ...prev, [name]: type === "checkbox" ? checked : value };
+      if (
+        name === "startTime" ||
+        name === "endTime" ||
+        name === "recurringDays" ||
+        name === "recurrenceEndDate" ||
+        name === "totalDays"
+      ) {
+        const calc = autoCalculateDuration(next);
+        return {
+          ...next,
+          totalDays: calc.totalDays,
+          totalHoursPart: calc.totalHoursPart,
+          totalMinutesPart: calc.totalMinutesPart,
+        };
+      }
+      return next;
+    });
     setFormErrors((prev) => ({ ...prev, [name]: "" }));
     setMessage("");
     setError("");
@@ -169,55 +269,101 @@ export default function TrainerDashboardPage() {
     const matchedCourse = courses.find(
       (course) => course.title.trim().toLowerCase() === value.trim().toLowerCase()
     );
-    setForm((prev) => ({
-      ...prev,
-      courseTitle: value,
-      courseId: matchedCourse && !matchedCourse.isFallback ? matchedCourse.id : "",
-      category: matchedCourse?.category || prev.category,
-      subtitle: matchedCourse?.subtitle || prev.subtitle,
-    }));
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        courseTitle: value,
+        courseId: matchedCourse && !matchedCourse.isFallback ? matchedCourse.id : "",
+        category: matchedCourse?.category || prev.category,
+        subtitle: matchedCourse?.subtitle || prev.subtitle,
+      };
+      return next;
+    });
     setFormErrors((prev) => ({ ...prev, courseTitle: "" }));
     setMessage("");
     setError("");
   };
 
-  const validateForm = () => {
-    const required = ["courseTitle", "title", "description", "startTime", "endTime", "meetingLink"];
+  const validateForm = (formToValidate = form) => {
+    const required = [
+      "courseTitle",
+      "title",
+      "category",
+      "subtitle",
+      "description",
+      "trainerInstructions",
+      "startTime",
+      "endTime",
+      "timezone",
+      "meetingLink",
+      "recurrenceEndDate"
+    ];
     const nextErrors = required.reduce((acc, key) => {
-      if (!String(form[key] || "").trim()) acc[key] = `${sessionFieldLabels[key]} is required.`;
+      if (!String(formToValidate[key] || "").trim()) {
+        const label = sessionFieldLabels[key] || (
+          key === "category" ? "Category" :
+          key === "subtitle" ? "Subtitle" :
+          key === "trainerInstructions" ? "Instructions / Notes for Students" :
+          key === "timezone" ? "Timezone" :
+          key
+        );
+        acc[key] = `${label} is required.`;
+      }
       return acc;
     }, {});
-    if (getDurationMinutes(form.startTime, form.endTime) <= 0) {
-      nextErrors.startTime = "Choose a valid start time.";
-      nextErrors.endTime = "End time must be after start time.";
+
+    if (!formToValidate.thumbnailPreview) {
+      nextErrors.thumbnailPreview = "Session thumbnail is required.";
     }
-    if (form.isRecurring) {
-      if (!form.recurringDays || form.recurringDays.length === 0) {
+
+    if (getDurationMinutes(formToValidate.startTime, formToValidate.endTime) <= 0) {
+      if (!nextErrors.startTime) nextErrors.startTime = "Choose a valid start time.";
+      if (!nextErrors.endTime) nextErrors.endTime = "End time must be after start time.";
+    }
+
+    if (formToValidate.isRecurring) {
+      if (!formToValidate.recurringDays || formToValidate.recurringDays.length === 0) {
         nextErrors.recurringDays = "Please select at least one recurring day.";
       }
-      if (!form.recurrenceEndDate) {
+      if (!formToValidate.recurrenceEndDate) {
         nextErrors.recurrenceEndDate = "Recurrence end date is required.";
       } else {
-        const selectedDate = new Date(form.recurrenceEndDate);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (selectedDate < today) {
-          nextErrors.recurrenceEndDate = "Recurrence end date cannot be in the past.";
+        const parts = String(formToValidate.recurrenceEndDate).split("-").map(Number);
+        if (parts.length === 3 && !parts.some(isNaN)) {
+          const selectedDate = new Date(parts[0], parts[1] - 1, parts[2]);
+          const today = new Date();
+          const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          if (selectedDate < localToday) {
+            nextErrors.recurrenceEndDate = "Recurrence end date cannot be in the past.";
+          }
         }
       }
     }
-    if (form.totalHours !== "" && form.totalHours !== undefined && form.totalHours !== null) {
-      const hoursVal = Number(form.totalHours);
-      if (isNaN(hoursVal) || hoursVal <= 0) {
-        nextErrors.totalHours = "Total hours must be a positive number.";
-      }
+
+    // Validate combined total hours
+    const hoursPart = formToValidate.totalHoursPart !== "" && formToValidate.totalHoursPart !== undefined && formToValidate.totalHoursPart !== null ? Number(formToValidate.totalHoursPart) : 0;
+    const minutesPart = formToValidate.totalMinutesPart !== "" && formToValidate.totalMinutesPart !== undefined && formToValidate.totalMinutesPart !== null ? Number(formToValidate.totalMinutesPart) : 0;
+    const totalHoursVal = hoursPart + (minutesPart / 60);
+
+    if (!formToValidate.totalHoursPart && !formToValidate.totalMinutesPart) {
+      nextErrors.totalHours = "Total Course Duration (Hours) is required.";
+    } else if (isNaN(totalHoursVal) || totalHoursVal <= 0) {
+      nextErrors.totalHours = "Total duration must be greater than zero.";
+    } else if (isNaN(hoursPart) || hoursPart < 0) {
+      nextErrors.totalHours = "Hours must be a non-negative number.";
+    } else if (isNaN(minutesPart) || minutesPart < 0 || minutesPart >= 60) {
+      nextErrors.totalHours = "Minutes must be between 0 and 59.";
     }
-    if (form.totalDays !== "" && form.totalDays !== undefined && form.totalDays !== null) {
-      const daysVal = Number(form.totalDays);
+
+    if (formToValidate.totalDays !== "" && formToValidate.totalDays !== undefined && formToValidate.totalDays !== null) {
+      const daysVal = Number(formToValidate.totalDays);
       if (isNaN(daysVal) || daysVal <= 0) {
         nextErrors.totalDays = "Total days must be a positive number.";
       }
+    } else {
+      nextErrors.totalDays = "Total Course Duration (Days) is required.";
     }
+
     setFormErrors(nextErrors);
     return nextErrors;
   };
@@ -253,7 +399,24 @@ export default function TrainerDashboardPage() {
       toast.warn(INACTIVE_TRAINER_MESSAGE);
       return;
     }
-    const nextErrors = validateForm();
+
+    const hoursPart = form.totalHoursPart !== "" && form.totalHoursPart !== undefined && form.totalHoursPart !== null ? Number(form.totalHoursPart) : 0;
+    const minutesPart = form.totalMinutesPart !== "" && form.totalMinutesPart !== undefined && form.totalMinutesPart !== null ? Number(form.totalMinutesPart) : 0;
+    
+    let calculatedTotalHours = "";
+    if (
+      (form.totalHoursPart !== "" && form.totalHoursPart !== undefined && form.totalHoursPart !== null) ||
+      (form.totalMinutesPart !== "" && form.totalMinutesPart !== undefined && form.totalMinutesPart !== null)
+    ) {
+      calculatedTotalHours = hoursPart + (minutesPart / 60);
+    }
+    
+    const formWithCalculatedHours = {
+      ...form,
+      totalHours: calculatedTotalHours !== "" ? calculatedTotalHours : "",
+    };
+
+    const nextErrors = validateForm(formWithCalculatedHours);
     if (Object.keys(nextErrors).length) {
       const firstError = Object.values(nextErrors)[0];
       setError(firstError);
@@ -263,8 +426,8 @@ export default function TrainerDashboardPage() {
     setSubmitting(true);
     setError("");
     try {
-      if (editingSessionId) await updateTrainerSession(editingSessionId, form);
-      else await createTrainerSession(form);
+      if (editingSessionId) await updateTrainerSession(editingSessionId, formWithCalculatedHours);
+      else await createTrainerSession(formWithCalculatedHours);
       const successMessage = editingSessionId
         ? "Recurring live session updated successfully."
         : "Daily recurring live session created successfully.";
@@ -294,6 +457,25 @@ export default function TrainerDashboardPage() {
     try {
       const details = await getTrainerSession(session.id);
       setEditingSessionId(details.id);
+
+      const rawTotalHours = details.totalHours ?? "";
+      let totalHoursPart = "";
+      let totalMinutesPart = "";
+      if (rawTotalHours !== "" && rawTotalHours !== null && rawTotalHours !== undefined) {
+        const totalHoursNum = Number(rawTotalHours);
+        if (!isNaN(totalHoursNum)) {
+          totalHoursPart = Math.floor(totalHoursNum);
+          totalMinutesPart = Math.round((totalHoursNum - totalHoursPart) * 60);
+          
+          if (totalHoursPart === 0 && totalMinutesPart === 0) {
+            totalHoursPart = "";
+            totalMinutesPart = "";
+          } else if (totalHoursPart === 0) {
+            totalHoursPart = "";
+          }
+        }
+      }
+
       setForm({
         courseId: details.courseId,
         courseTitle: details.courseTitle,
@@ -321,6 +503,8 @@ export default function TrainerDashboardPage() {
         whatsappCustomTitle: details.whatsappCustomTitle || "",
         whatsappButtonUrl: details.whatsappButtonUrl || "",
         totalHours: details.totalHours ?? "",
+        totalHoursPart,
+        totalMinutesPart,
         totalDays: details.totalDays ?? "",
       });
       setMessage("");

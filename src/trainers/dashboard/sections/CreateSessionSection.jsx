@@ -92,6 +92,9 @@ export default function CreateSessionSection({
                 <input type="file" accept="image/*" onChange={onThumbnailChange} className="hidden" />
               </label>
               <p className="mt-2 text-xs text-slate-500">Image only. Maximum size 5 MB.</p>
+              {formErrors.thumbnailPreview ? (
+                <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.thumbnailPreview}</p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -144,6 +147,7 @@ export default function CreateSessionSection({
               <option key={category} value={category} />
             ))}
           </datalist>
+          {formErrors.category ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.category}</p> : null}
         </label>
 
         <label>
@@ -161,6 +165,7 @@ export default function CreateSessionSection({
               <option key={subtitle} value={subtitle} />
             ))}
           </datalist>
+          {formErrors.subtitle ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.subtitle}</p> : null}
         </label>
 
         <label className="sm:col-span-2">
@@ -238,20 +243,43 @@ export default function CreateSessionSection({
           {formErrors.meetingLink ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.meetingLink}</p> : null}
         </label>
 
-        <label>
-          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Total Course Duration (Hours)</span>
-          <input
-            name="totalHours"
-            type="number"
-            step="any"
-            min="0"
-            value={form.totalHours ?? ""}
-            onChange={onChange}
-            placeholder="e.g. 40"
-            className={fieldClass("totalHours", "mt-1 h-11 w-full rounded-xl px-4 text-sm outline-none")}
-          />
-          {formErrors.totalHours ? <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.totalHours}</p> : null}
-        </label>
+        <div>
+          <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500 block mb-1">
+            Total Course Duration
+          </span>
+          <div className="flex gap-3">
+            <div className="flex-1 relative">
+              <input
+                name="totalHoursPart"
+                type="number"
+                min="0"
+                value={form.totalHoursPart ?? ""}
+                onChange={onChange}
+                placeholder="Hours"
+                className={fieldClass("totalHours", "h-11 w-full rounded-xl px-4 pr-10 text-sm outline-none bg-white transition-all")}
+              />
+              <span className="absolute right-3 top-3 text-xs font-bold text-slate-400 select-none">
+                hrs
+              </span>
+            </div>
+            <div className="flex-1 relative">
+              <input
+                name="totalMinutesPart"
+                type="number"
+                min="0"
+                max="59"
+                value={form.totalMinutesPart ?? ""}
+                onChange={onChange}
+                placeholder="Minutes"
+                className={fieldClass("totalHours", "h-11 w-full rounded-xl px-4 pr-11 text-sm outline-none bg-white transition-all")}
+              />
+              <span className="absolute right-3 top-3 text-xs font-bold text-slate-400 select-none">
+                mins
+              </span>
+            </div>
+          </div>
+          {formErrors.totalHours ? <p className="mt-1.5 text-xs font-semibold text-red-600">{formErrors.totalHours}</p> : null}
+        </div>
 
         <label>
           <span className="text-xs font-extrabold uppercase tracking-widest text-slate-500">Total Course Duration (Days)</span>

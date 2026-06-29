@@ -25,7 +25,9 @@ import {
   extendSessionOccurrence,
   getTrainerSessionAttendance,
   getCourseStudentAttendance,
-  getAttendanceEligibility
+  getAttendanceEligibility,
+  markStudentAttendance,
+  getDailyAttendanceSummary
 } from "../api/trainerAttendanceApi";
 
 const emptyDailyReport = {
@@ -144,18 +146,74 @@ export default function TrainerSessionHistoryPage() {
     setLoadingDaily(true);
     setDailyError("");
     try {
-      const data = await getDailyAttendance(sessionId, d);
-      if (data.emptyState) {
+      const [rosterData, summaryData] = await Promise.all([
+        getDailyAttendance(sessionId, d),
+        getDailyAttendanceSummary(sessionId, d).catch(err => {
+          console.warn("Failed to load attendance summary, using roster fallback summary", err);
+          return null;
+        })
+      ]);
+
+      if (rosterData.emptyState) {
         setDailyReport(emptyDailyReport);
-        setDailyError(data.message || "No attendance data available for this date.");
+        setDailyError(rosterData.message || "No attendance data available for this date.");
       } else {
-        setDailyReport(data);
+        const total = summaryData?.totalStudents ?? rosterData?.summary?.totalStudents ?? 0;
+        const present = summaryData?.present ?? summaryData?.presentCount ?? rosterData?.summary?.present ?? 0;
+        const absent = summaryData?.absent ?? summaryData?.absentCount ?? rosterData?.summary?.absent ?? 0;
+        const late = summaryData?.late ?? summaryData?.lateCount ?? rosterData?.summary?.late ?? 0;
+        const attendancePercentage = summaryData?.attendancePercentage ?? summaryData?.percentage ?? rosterData?.summary?.attendancePercentage ?? 0;
+
+        const mergedReport = {
+          ...rosterData,
+          summary: {
+            totalStudents: total,
+            present: present,
+            absent: absent,
+            late: late,
+            attendancePercentage: attendancePercentage
+          }
+        };
+        setDailyReport(mergedReport);
       }
     } catch (err) {
       setDailyError(err?.message || "Unable to load daily attendance.");
       setDailyReport(emptyDailyReport);
     } finally {
       setLoadingDaily(false);
+    }
+  };
+
+  const handleMarkAttendance = async (studentId, status) => {
+    const occurrenceId = dailyReport.session?.id;
+    if (!occurrenceId) {
+      toast.error("No active session occurrence identified.");
+      return;
+    }
+
+    // Optimistically update UI status
+    setDailyReport((prev) => {
+      if (!prev || !prev.students) return prev;
+      const updatedStudents = prev.students.map((s) => {
+        if (s.studentId === studentId || s.id === studentId) {
+          return { ...s, status };
+        }
+        return s;
+      });
+      return { ...prev, students: updatedStudents };
+    });
+
+    try {
+      await markStudentAttendance({
+        occurrenceId,
+        studentId,
+        status,
+      });
+      toast.success(`Attendance updated to ${status} successfully.`);
+      loadDailyAttendance(date);
+    } catch (err) {
+      toast.error(err?.message || "Failed to mark student attendance.");
+      loadDailyAttendance(date);
     }
   };
 
@@ -380,9 +438,10 @@ export default function TrainerSessionHistoryPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
                   <StatCard label="Total Students" value={dailyReport.summary.totalStudents} icon={FiUsers} />
                   <StatCard label="Present" value={dailyReport.summary.present} icon={FiCheckCircle} tone="green" />
+                  <StatCard label="Late" value={dailyReport.summary.late || 0} icon={FiClock} tone="amber" />
                   <StatCard label="Absent" value={dailyReport.summary.absent} icon={FiXCircle} tone="red" />
                   <StatCard label="Attendance" value={formatPercent(dailyReport.summary.attendancePercentage)} icon={FiTrendingUp} tone="green" />
                 </div>
@@ -396,28 +455,72 @@ export default function TrainerSessionHistoryPage() {
                         <thead>
                           <tr className="border-b-2 border-slate-200 text-xs uppercase tracking-widest text-slate-500">
                             <th className="px-4 py-4 font-extrabold">Student Name</th>
-                            <th className="px-4 py-4 font-extrabold">Status</th>
-                            <th className="px-4 py-4 font-extrabold">Join Time</th>
-                            <th className="px-4 py-4 font-extrabold">Leave Time</th>
-                            <th className="px-4 py-4 font-extrabold">Duration</th>
+                            <th className="px-4 py-4 font-extrabold text-center">Status</th>
+                            <th className="px-4 py-4 font-extrabold text-center">Mark Attendance</th>
+                            <th className="px-4 py-4 font-extrabold text-center">Join Time</th>
+                            <th className="px-4 py-4 font-extrabold text-center">Leave Time</th>
+                            <th className="px-4 py-4 font-extrabold text-center">Duration (Mins)</th>
+                            <th className="px-4 py-4 font-extrabold text-center">Join Count</th>
                             <th className="px-4 py-4 font-extrabold text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {studentRecords.map((student) => (
-                            <tr key={student.id || student.email} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                            <tr key={student.studentId || student.id || student.email} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
                               <td className="px-4 py-4">
-                                <div className="font-extrabold text-slate-900">{student.name}</div>
+                                <div className="font-extrabold text-slate-900">{student.name || student.fullName || "Student"}</div>
                                 <div className="text-xs font-semibold text-slate-500 mt-0.5">{student.email || "-"}</div>
                               </td>
-                              <td className="px-4 py-4">
+                              <td className="px-4 py-4 text-center">
                                 <span className={`inline-flex rounded-md px-2.5 py-1 text-[10px] uppercase font-black tracking-wider ${statusClass(student.status)}`}>
-                                  {student.status}
+                                  {student.status || "absent"}
                                 </span>
                               </td>
-                              <td className="px-4 py-4 font-semibold text-slate-600">{student.joinTime || "-"}</td>
-                              <td className="px-4 py-4 font-semibold text-slate-600">{student.leaveTime || "Active"}</td>
-                              <td className="px-4 py-4 font-bold text-slate-900">{student.duration || "-"}</td>
+                              <td className="px-4 py-4 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleMarkAttendance(student.studentId || student.id, "present")}
+                                    className={`p-1.5 rounded-full border transition-all ${
+                                      (student.status || "").toLowerCase() === "present"
+                                        ? "bg-emerald-500 border-emerald-500 text-white shadow-sm"
+                                        : "border-slate-200 text-slate-400 hover:border-emerald-500 hover:text-emerald-500 bg-white"
+                                    }`}
+                                    title="Mark Present"
+                                  >
+                                    <FiCheckCircle className="text-base" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleMarkAttendance(student.studentId || student.id, "late")}
+                                    className={`p-1.5 rounded-full border transition-all ${
+                                      (student.status || "").toLowerCase() === "late"
+                                        ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                                        : "border-slate-200 text-slate-400 hover:border-amber-500 hover:text-amber-500 bg-white"
+                                    }`}
+                                    title="Mark Late"
+                                  >
+                                    <FiClock className="text-base" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleMarkAttendance(student.studentId || student.id, "absent")}
+                                    className={`p-1.5 rounded-full border transition-all ${
+                                      (student.status || "").toLowerCase() === "absent"
+                                        ? "bg-red-500 border-red-500 text-white shadow-sm"
+                                        : "border-slate-200 text-slate-400 hover:border-red-500 hover:text-red-500 bg-white"
+                                    }`}
+                                    title="Mark Absent"
+                                  >
+                                    <FiXCircle className="text-base" />
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 font-semibold text-slate-600 text-center">{student.joinTime || student.firstJoinedAt || "-"}</td>
+                              <td className="px-4 py-4 font-semibold text-slate-600 text-center">{student.leaveTime || student.lastLeftAt || "Active"}</td>
+                              <td className="px-4 py-4 font-bold text-slate-900 text-center">
+                                {student.durationMins ?? (student.durationSeconds ? Math.round(student.durationSeconds / 60) : null) ?? student.duration ?? "-"}
+                              </td>
+                              <td className="px-4 py-4 font-bold text-slate-900 text-center">
+                                {student.joinCount ?? student.joins ?? student.join_count ?? 1}
+                              </td>
                               <td className="px-4 py-4 text-right">
                                 <button
                                   onClick={() => handleViewStudentDetails(student)}

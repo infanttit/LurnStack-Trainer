@@ -21,6 +21,8 @@ export const initialSessionForm = {
   whatsappButtonUrl: "",
   recurrenceEndDate: "",
   totalHours: "",
+  totalHoursPart: "",
+  totalMinutesPart: "",
   totalDays: "",
 };
 

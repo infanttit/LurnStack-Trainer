@@ -22,6 +22,7 @@ import {
   formatPriceInPaise,
   getSessionStatus,
   getStatusClass,
+  formatDurationHours,
 } from "../sessionDisplayUtils";
 
 export default function RecurringSessionsSection({
@@ -251,8 +252,8 @@ function SessionRow({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {session.totalHours ? (
                           <div>
-                            <span className="text-xs font-medium text-slate-500 block">Total Hours</span>
-                            <span className="text-sm font-extrabold text-slate-900">{session.totalHours} hours</span>
+                            <span className="text-xs font-medium text-slate-500 block">Total Duration</span>
+                            <span className="text-sm font-extrabold text-slate-900">{formatDurationHours(session.totalHours)}</span>
                             {session.completedHours > 0 ? (
                               <div className="mt-1.5">
                                 <div className="flex justify-between text-[10px] font-bold text-[#006b58] mb-1">
