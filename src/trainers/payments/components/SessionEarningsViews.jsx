@@ -1,4 +1,4 @@
-﻿import { useMemo } from "react";
+import { useMemo } from "react";
 import { FiArrowLeft, FiCreditCard, FiSearch } from "react-icons/fi";
 import { formatMoney, getEarningStatusClass } from "../paymentUtils";
 
@@ -201,7 +201,7 @@ function SessionEarningHistory({ session, onBack }) {
 
       <div className="overflow-hidden bg-white shadow-sm">
         <div className="grid grid-cols-1 gap-3 bg-slate-50 px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-400 lg:grid-cols-[1fr_160px_160px_160px_120px]">
-          <div>Reference</div><div>Admin price</div><div>Trainer share</div><div>Trainer earning</div><div>Status</div>
+          <div>Reference</div><div>Admin price</div><div>Trainer share</div><div>Trainer earning</div><div>Payout Status</div>
         </div>
         <div className="divide-y divide-slate-100">
           {session.rows.map((earning) => (
